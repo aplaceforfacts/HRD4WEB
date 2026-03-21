@@ -1,0 +1,339 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SeasonStatus {
+  SETUP
+  OPEN
+  LOCKED
+  COMPLETED
+}
+
+enum SubmissionMethod {
+  SELF_SERVICE
+  ADMIN_MANUAL
+  IMPORTED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  WAIVED
+}
+
+enum ScoringPeriodType {
+  MONTHLY
+  SEASON
+}
+
+model Season {
+  id                 String               @id @default(cuid())
+  year               Int                  @unique
+  name               String
+  entryDeadlineAt    DateTime
+  regularSeasonStart DateTime
+  regularSeasonEnd   DateTime
+  entryStatus        SeasonStatus         @default(SETUP)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  groups             Group[]
+  scoringPeriods     ScoringPeriod[]
+  entries            Entry[]
+  seasonPlayerGroups SeasonPlayerGroup[]
+  statSnapshots      PlayerStatSnapshot[]
+  playerPeriodStats  PlayerPeriodStat[]
+  entryPeriodScores  EntryPeriodScore[]
+  optimalLineups     OptimalLineup[]
+  winOdds            EntryWinOdds[]
+
+  @@index([year])
+}
+
+model Group {
+  id             String               @id @default(cuid())
+  seasonId       String
+  code           String
+  name           String
+  selectionCount Int
+  sortOrder      Int
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  season         Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  seasonPlayers  SeasonPlayerGroup[]
+  entryPlayers   EntryPlayer[]
+  playerStats    PlayerPeriodStat[]
+  optimalPlayers OptimalLineupPlayer[]
+
+  @@unique([seasonId, code])
+  @@index([seasonId, sortOrder])
+}
+
+model Player {
+  id               String               @id @default(cuid())
+  providerPlayerId String?              @unique
+  fullName         String               @unique
+  mlbTeam          String?
+  primaryPosition  String?
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  seasonGroups     SeasonPlayerGroup[]
+  entryPlayers     EntryPlayer[]
+  statSnapshots    PlayerStatSnapshot[]
+  periodStats      PlayerPeriodStat[]
+  historicalStats  HistoricalPlayerStat[]
+  projections      PlayerProjection[]
+  optimalPlayers   OptimalLineupPlayer[]
+
+  @@index([fullName])
+}
+
+model SeasonPlayerGroup {
+  id           String   @id @default(cuid())
+  seasonId     String
+  groupId      String
+  playerId     String
+  displayOrder Int?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  season       Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  player       Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, playerId])
+  @@unique([groupId, playerId])
+  @@index([groupId, displayOrder])
+}
+
+model Owner {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries   Entry[]
+
+  @@index([email])
+}
+
+model Entry {
+  id               String           @id @default(cuid())
+  seasonId         String
+  ownerId          String
+  submissionMethod SubmissionMethod
+  submittedAt      DateTime?
+  isLocked         Boolean          @default(false)
+  lockedAt         DateTime?
+  paymentStatus    PaymentStatus    @default(UNPAID)
+  paymentNote      String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  season           Season           @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  owner            Owner            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  players          EntryPlayer[]
+  periodScores     EntryPeriodScore[]
+  winOdds          EntryWinOdds[]
+
+  @@unique([seasonId, ownerId])
+  @@index([seasonId, submittedAt])
+}
+
+model EntryPlayer {
+  id         String   @id @default(cuid())
+  entryId    String
+  groupId    String
+  playerId   String
+  slotNumber Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  entry      Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, groupId, slotNumber])
+  @@unique([entryId, playerId])
+}
+
+model ScoringPeriod {
+  id          String            @id @default(cuid())
+  seasonId    String
+  label       String
+  startDate   DateTime
+  endDate     DateTime
+  sortOrder   Int
+  periodType  ScoringPeriodType
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  season      Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  playerStats PlayerPeriodStat[]
+  entryScores EntryPeriodScore[]
+  optimalLineup OptimalLineup?
+  winOdds     EntryWinOdds[]
+
+  @@unique([seasonId, label])
+  @@index([seasonId, sortOrder])
+}
+
+model HistoricalPlayerStat {
+  id          String   @id @default(cuid())
+  playerId    String
+  seasonYear  Int
+  gamesPlayed Int?
+  atBats      Int?
+  homeRuns    Int      @default(0)
+  sluggingPct Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, seasonYear])
+  @@index([seasonYear])
+}
+
+model PlayerProjection {
+  id                   String   @id @default(cuid())
+  playerId             String
+  seasonYear           Int
+  source               String
+  projectedHomeRuns    Float?
+  projectedAtBats      Float?
+  projectedSluggingPct Float?
+  importedAt           DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  player               Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, seasonYear, source])
+  @@index([seasonYear, source])
+}
+
+model PlayerStatSnapshot {
+  id           String   @id @default(cuid())
+  seasonId     String
+  playerId     String
+  snapshotDate DateTime
+  teamCode     String?
+  gamesPlayed  Int?
+  atBats       Int?
+  homeRuns     Int      @default(0)
+  sluggingPct  Float?
+  sourceName   String
+  createdAt    DateTime @default(now())
+
+  season       Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  player       Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, playerId, snapshotDate])
+  @@index([seasonId, snapshotDate])
+}
+
+model PlayerPeriodStat {
+  id              String        @id @default(cuid())
+  seasonId        String
+  playerId        String
+  scoringPeriodId String
+  groupId         String
+  homeRuns        Int           @default(0)
+  atBats          Int?
+  sluggingPct     Float?
+  rankInGroup     Int?
+  isTied          Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  season          Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  player          Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  scoringPeriod   ScoringPeriod @relation(fields: [scoringPeriodId], references: [id], onDelete: Cascade)
+  group           Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, scoringPeriodId])
+  @@index([scoringPeriodId, groupId, homeRuns])
+}
+
+model EntryPeriodScore {
+  id              String        @id @default(cuid())
+  seasonId        String
+  entryId         String
+  scoringPeriodId String
+  homeRuns        Int           @default(0)
+  rank            Int?
+  isTied          Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  season          Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  entry           Entry         @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  scoringPeriod   ScoringPeriod @relation(fields: [scoringPeriodId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, scoringPeriodId])
+  @@index([scoringPeriodId, homeRuns])
+}
+
+model OptimalLineup {
+  id              String               @id @default(cuid())
+  seasonId        String
+  scoringPeriodId String               @unique
+  totalHomeRuns   Int                  @default(0)
+  computedAt      DateTime
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  season          Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  scoringPeriod   ScoringPeriod        @relation(fields: [scoringPeriodId], references: [id], onDelete: Cascade)
+  players         OptimalLineupPlayer[]
+}
+
+model OptimalLineupPlayer {
+  id              String        @id @default(cuid())
+  optimalLineupId String
+  groupId         String
+  playerId        String
+  slotNumber      Int
+  homeRuns        Int           @default(0)
+  rankInGroup     Int?
+  createdAt       DateTime      @default(now())
+
+  optimalLineup   OptimalLineup @relation(fields: [optimalLineupId], references: [id], onDelete: Cascade)
+  group           Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  player          Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([optimalLineupId, groupId, slotNumber])
+}
+
+model EntryWinOdds {
+  id              String        @id @default(cuid())
+  seasonId        String
+  entryId         String
+  scoringPeriodId String
+  winProbability  Float
+  top3Probability Float?
+  expectedFinalHr Float?
+  simulatedAt     DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  season          Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  entry           Entry         @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  scoringPeriod   ScoringPeriod @relation(fields: [scoringPeriodId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, scoringPeriodId])
+  @@index([scoringPeriodId, winProbability])
+}
