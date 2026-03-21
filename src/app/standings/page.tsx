@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic"
 import Link from "next/link"
 import { EntrySearch } from "@/components/entry-search"
 import { Card, CardContent } from "@/components/ui/card"

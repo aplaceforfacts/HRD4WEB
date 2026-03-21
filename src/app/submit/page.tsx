@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic"
 import { EntryForm } from "@/components/entry-form"
 import { getEntryFormSeason } from "@/server/entries/get-entry-form-season"
 

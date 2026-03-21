@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic"
 import { notFound } from "next/navigation"
 import { PeriodTabs } from "@/components/period-tabs"
 import { TeamGapTable } from "@/components/team-gap-table"

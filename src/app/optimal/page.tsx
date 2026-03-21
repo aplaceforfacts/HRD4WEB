@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { getOptimalLineupByPeriodLabel } from "@/server/optimal/get-optimal-lineup"
