@@ -30,7 +30,11 @@ export async function getPlayerSeasonStats(playerId: number, season = 2026) {
   return {
     homeRuns: Number(stat.homeRuns ?? 0),
     atBats: Number(stat.atBats ?? 0),
-    sluggingPct: stat.slugging ? Number(stat.slugging) : null,
+    sluggingPct: stat.slg
+      ? Number(stat.slg)
+      : stat.slugging
+        ? Number(stat.slugging)
+        : null,
     teamCode: split?.team?.abbreviation ?? null,
   }
 }

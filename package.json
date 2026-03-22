@@ -14,7 +14,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "import:player-sheet:2026": "tsx scripts/import-player-sheet-2026.ts",
     "import:historical-stats": "tsx scripts/import-historical-stats.ts",
-    "import:projections": "tsx scripts/import-projections.ts"
+    "import:projections": "tsx scripts/import-projections.ts",
+    "backfill:historical-stats": "tsx scripts/backfill-historical-stats.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",
