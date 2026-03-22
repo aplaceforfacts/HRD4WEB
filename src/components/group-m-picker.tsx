@@ -76,7 +76,6 @@ export function GroupMPicker({ value, options, onToggle }: GroupMPickerProps) {
               <th className="px-4 py-3">Pick</th>
               <th className="px-4 py-3">Player</th>
               <th className="px-4 py-3">Team</th>
-              <th className="px-4 py-3">Pos</th>
               <th className="px-4 py-3">2025 HR</th>
               <th className="px-4 py-3">2024 HR</th>
               <th className="px-4 py-3">Proj HR</th>
@@ -102,7 +101,6 @@ export function GroupMPicker({ value, options, onToggle }: GroupMPickerProps) {
                   </td>
                   <td className="px-4 py-3 font-medium">{player.fullName}</td>
                   <td className="px-4 py-3">{player.mlbTeam ?? "—"}</td>
-                  <td className="px-4 py-3">{player.primaryPosition ?? "—"}</td>
                   <td className="px-4 py-3">{stats2025?.homeRuns ?? "—"}</td>
                   <td className="px-4 py-3">{stats2024?.homeRuns ?? "—"}</td>
                   <td className="px-4 py-3">{projection?.projectedHomeRuns ?? "—"}</td>
