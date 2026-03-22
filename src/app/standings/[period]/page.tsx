@@ -37,20 +37,14 @@ export default async function PeriodStandingsPage({ params }: { params: Promise<
                   <th className="px-5 py-3">Rank</th>
                   <th className="px-5 py-3">Owner</th>
                   <th className="px-5 py-3">HR</th>
-                  <th className="px-5 py-3">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {standings.rows.map((row) => (
                   <tr key={row.id} className="border-b border-neutral-100 last:border-0">
                     <td className="px-5 py-4 font-medium">{row.rank}</td>
-                    <td className="px-5 py-4">
-                      <Link className="font-medium text-neutral-900 underline-offset-4 hover:underline" href={`/team/${row.entryId}?period=${period}`}>
-                        {row.ownerName}
-                      </Link>
-                    </td>
+                    <td className="px-5 py-4">{row.ownerName}</td>
                     <td className="px-5 py-4 font-semibold">{row.score}</td>
-                    <td className="px-5 py-4">{row.isTied ? <Badge>Tied</Badge> : <span className="text-neutral-400">—</span>}</td>
                   </tr>
                 ))}
               </tbody>
