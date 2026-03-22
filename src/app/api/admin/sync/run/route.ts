@@ -1,12 +1,36 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { runDailySync } from "@/server/stats/run-daily-sync"
 
-export async function POST() {
+export const dynamic = "force-dynamic"
+
+export async function POST(request: NextRequest) {
   try {
+    const authHeader = request.headers.get("authorization")
+    const cronSecret = process.env.CRON_SECRET
+
+    if (!cronSecret) {
+      return NextResponse.json(
+        { ok: false, message: "CRON_SECRET is not configured." },
+        { status: 500 }
+      )
+    }
+
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json(
+        { ok: false, message: "Unauthorized" },
+        { status: 401 }
+      )
+    }
+
     const result = await runDailySync(2026)
-    return NextResponse.json(result)
+    return NextResponse.json({ ok: true, ...result })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error"
-    return NextResponse.json({ ok: false, message }, { status: 500 })
+    const message =
+      error instanceof Error ? error.message : "Unknown sync error"
+
+    return NextResponse.json(
+      { ok: false, message },
+      { status: 500 }
+    )
   }
 }
