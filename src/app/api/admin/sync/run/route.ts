@@ -3,7 +3,7 @@ import { runDailySync } from "@/server/stats/run-daily-sync"
 
 export const dynamic = "force-dynamic"
 
-export async function POST(request: NextRequest) {
+async function handle(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization")
     const cronSecret = process.env.CRON_SECRET
@@ -33,4 +33,13 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+// ✅ Allow BOTH methods
+export async function GET(request: NextRequest) {
+  return handle(request)
+}
+
+export async function POST(request: NextRequest) {
+  return handle(request)
 }
