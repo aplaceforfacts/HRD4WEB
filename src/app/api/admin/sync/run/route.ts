@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await runDailySync(2026)
-    return NextResponse.json({ ok: true, ...result })
+    return NextResponse.json(result)
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown sync error"
