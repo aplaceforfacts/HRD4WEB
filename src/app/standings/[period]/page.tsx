@@ -58,7 +58,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
           },
         },
       },
-      orderBy: [{ score: "desc" }, { updatedAt: "asc" }],
+      orderBy: [{ homeRuns: "desc" }, { updatedAt: "asc" }],
     }),
     prisma.entry.count({
       where: {
@@ -100,7 +100,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
       rank: index + 1,
       ownerName: row.entry.owner.name,
       entryId: row.entry.id,
-      score: row.score,
+      homeRuns: row.homeRuns,
       selectedPlayers,
     }
   })
@@ -212,7 +212,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
                     </td>
 
                     <td className="px-5 py-4 text-right font-semibold tabular-nums">
-                      {row.score}
+                      {row.homeRuns}
                     </td>
                   </tr>
                 ))
