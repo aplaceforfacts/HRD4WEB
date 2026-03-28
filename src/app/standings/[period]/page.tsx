@@ -50,7 +50,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
         entry: {
           include: {
             owner: true,
-            entryPlayers: {
+            players: {
               include: {
                 player: true,
               },
@@ -83,7 +83,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
   )
 
   const rows = scores.map((row, index) => {
-    const selectedPlayers = row.entry.entryPlayers.map((entryPlayer) => {
+    const selectedPlayers = row.entry.players.map((entryPlayer) => {
       const pickCount = pickCountMap.get(entryPlayer.playerId) ?? 0
       const pickPercentage = totalEntries > 0 ? pickCount / totalEntries : 0
 
