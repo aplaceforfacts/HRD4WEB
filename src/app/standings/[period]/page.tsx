@@ -30,10 +30,10 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
     notFound()
   }
 
+  const decodedPeriod = decodeURIComponent(period).toLowerCase()
+
   const scoringPeriod = season.scoringPeriods.find(
-    (item) =>
-      item.slug === period ||
-      (item.code && item.code.toLowerCase() === period.toLowerCase())
+    (item) => item.label.toLowerCase() === decodedPeriod
   )
 
   if (!scoringPeriod) {
@@ -118,7 +118,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">
-              {scoringPeriod.name} Standings
+              {scoringPeriod.label} Standings
             </h1>
             <p className="mt-1 text-sm text-neutral-500">{season.name}</p>
           </div>
@@ -130,14 +130,14 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
               return (
                 <Link
                   key={item.id}
-                  href={`/standings/${item.slug}`}
+                  href={`/standings/${encodeURIComponent(item.label)}`}
                   className={
                     isActive
                       ? "rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm text-white transition"
                       : "rounded-full border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-700 transition hover:bg-neutral-50"
                   }
                 >
-                  {item.name}
+                  {item.label}
                 </Link>
               )
             })}
