@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 import { notFound } from "next/navigation"
 import { PeriodTabs } from "@/components/period-tabs"
 import { PERIODS } from "@/lib/periods"
@@ -34,7 +35,7 @@ export default async function GroupPlayersPage({
               <th className="px-5 py-3">Player</th>
               <th className="px-5 py-3">Team</th>
               <th className="px-5 py-3">HR</th>
-              <th className="px-5 py-3">Tie</th>
+              <th className="px-5 py-3">Pick %</th>
             </tr>
           </thead>
           <tbody>
@@ -44,7 +45,11 @@ export default async function GroupPlayersPage({
                 <td className="px-5 py-4">{row.fullName}</td>
                 <td className="px-5 py-4">{row.mlbTeam ?? "—"}</td>
                 <td className="px-5 py-4">{row.score}</td>
-                <td className="px-5 py-4">{row.isTied ? "T" : ""}</td>
+                <td className="px-5 py-4">
+                  {typeof row.pickPercentage === "number"
+                    ? `${(row.pickPercentage * 100).toFixed(1)}%`
+                    : "—"}
+                </td>
               </tr>
             ))}
           </tbody>
