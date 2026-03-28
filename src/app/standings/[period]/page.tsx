@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
+import { periodLabelToSlug } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 
@@ -33,7 +34,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
   const decodedPeriod = decodeURIComponent(period).toLowerCase()
 
   const scoringPeriod = season.scoringPeriods.find(
-    (item) => item.label.toLowerCase() === decodedPeriod
+    (item) => periodLabelToSlug(item.label) === decodedPeriod
   )
 
   if (!scoringPeriod) {
@@ -130,7 +131,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
               return (
                 <Link
                   key={item.id}
-                  href={`/standings/${encodeURIComponent(item.label)}`}
+                  href={`/standings/${periodLabelToSlug(item.label)}`}
                   className={
                     isActive
                       ? "rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm text-white transition"
