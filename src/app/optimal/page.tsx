@@ -1,10 +1,29 @@
 export const dynamic = "force-dynamic"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { prisma } from "@/lib/prisma"
 import { getOptimalLineupByPeriodLabel } from "@/server/optimal/get-optimal-lineup"
 
+function formatPercent(value: number) {
+  return `${(value * 100).toFixed(1)}%`
+}
+
 export default async function OptimalPage() {
-  const lineup = await getOptimalLineupByPeriodLabel("Season")
+  const [lineup, totalEntries, picksByPlayer] = await Promise.all([
+    getOptimalLineupByPeriodLabel("Season"),
+    prisma.entry.count({
+      where: { season: { year: 2026 } },
+    }),
+    prisma.entryPlayer.groupBy({
+      by: ["playerId"],
+      where: { entry: { season: { year: 2026 } } },
+      _count: { playerId: true },
+    }),
+  ])
+
+  const pickCountMap = new Map<string, number>(
+    picksByPlayer.map((row) => [row.playerId, row._count.playerId])
+  )
 
   return (
     <div className="space-y-6">
@@ -47,8 +66,8 @@ export default async function OptimalPage() {
                     <tr className="border-b border-neutral-200 text-left text-neutral-500">
                       <th className="px-5 py-3">Group</th>
                       <th className="px-5 py-3">Player</th>
-                      <th className="px-5 py-3">Slot</th>
                       <th className="px-5 py-3">HR</th>
+                      <th className="px-5 py-3">Pick %</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -56,8 +75,10 @@ export default async function OptimalPage() {
                       <tr key={row.id} className="border-b border-neutral-100 last:border-0">
                         <td className="px-5 py-4 font-medium">{row.group.code}</td>
                         <td className="px-5 py-4">{row.player.fullName}</td>
-                        <td className="px-5 py-4">{row.slotNumber}</td>
                         <td className="px-5 py-4 font-semibold">{row.homeRuns}</td>
+                        <td className="px-5 py-4 text-neutral-600">
+                          {formatPercent(totalEntries > 0 ? (pickCountMap.get(row.player.id) ?? 0) / totalEntries : 0)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
