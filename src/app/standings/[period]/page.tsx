@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 export const dynamic = "force-dynamic"
 
 type PageProps = {
-  params: { Promise<{
+  params: Promise<{
     period: string
   }>
 }
