@@ -5,9 +5,9 @@ import { prisma } from "@/lib/prisma"
 export const dynamic = "force-dynamic"
 
 type PageProps = {
-  params: {
+  params: { Promise<{
     period: string
-  }
+  }>
 }
 
 function formatPercent(value: number) {
@@ -15,7 +15,7 @@ function formatPercent(value: number) {
 }
 
 export default async function StandingsPeriodPage({ params }: PageProps) {
-  const period = params.period
+  const { period } = await params
 
   const season = await prisma.season.findUnique({
     where: { year: 2026 },
