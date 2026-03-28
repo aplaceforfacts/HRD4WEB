@@ -9,3 +9,5 @@ node_modules/
 .env
 .env
 src/data/*.csv
+.vercel
+.env*.local
