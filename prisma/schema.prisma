@@ -170,21 +170,21 @@ model EntryPlayer {
 }
 
 model ScoringPeriod {
-  id          String            @id @default(cuid())
-  seasonId    String
-  label       String
-  startDate   DateTime
-  endDate     DateTime
-  sortOrder   Int
-  periodType  ScoringPeriodType
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id            String            @id @default(cuid())
+  seasonId      String
+  label         String
+  startDate     DateTime
+  endDate       DateTime
+  sortOrder     Int
+  periodType    ScoringPeriodType
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
-  season      Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  playerStats PlayerPeriodStat[]
-  entryScores EntryPeriodScore[]
+  season        Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  playerStats   PlayerPeriodStat[]
+  entryScores   EntryPeriodScore[]
   optimalLineup OptimalLineup?
-  winOdds     EntryWinOdds[]
+  winOdds       EntryWinOdds[]
 
   @@unique([seasonId, label])
   @@index([seasonId, sortOrder])

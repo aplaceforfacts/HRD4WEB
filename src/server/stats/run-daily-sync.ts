@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { calculateEntryPeriodScores } from "@/server/scoring/calculate-entry-period-scores"
 import { calculatePlayerPeriodStats } from "@/server/scoring/calculate-player-period-stats"
 import { computeOptimalLineup } from "@/server/scoring/compute-optimal-lineup"
+import { computeEntryWinOdds } from "@/server/odds/compute-entry-win-odds"
 import { importMlbSnapshotsForToday } from "./import-mlb-snapshots"
 
 export async function runDailySync(seasonYear = 2026) {
@@ -22,10 +23,14 @@ export async function runDailySync(seasonYear = 2026) {
     await computeOptimalLineup(season.id, period.id)
   }
 
+  const oddsResult = await computeEntryWinOdds(seasonYear)
+
   return {
     ok: true,
     seasonYear,
     importedSnapshots: snapshotResult.imported,
     periodsProcessed: season.scoringPeriods.length,
+    oddsPeriodsProcessed: oddsResult.periodsProcessed,
+    oddsSummaries: oddsResult.summaries,
   }
 }

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { getPlayerSeasonStats, searchMlbPlayerByName } from "./mlb-stats-api"
+import { getPlayerSeasonSnapshot, searchMlbPlayerByName } from "./mlb-stats-api"
 
 type MatchResult = {
   playerId: string
@@ -122,24 +122,15 @@ async function ensureProviderIds(): Promise<MatchResult[]> {
     if (overrideId) {
       const existing = await prisma.player.findFirst({
         where: { providerPlayerId: overrideId },
-        select: { fullName: true },
+        select: { id: true, fullName: true },
       })
 
-      if (!existing) {
+      if (!existing || existing.id === player.id || existing.fullName === player.fullName) {
         await prisma.player.update({
           where: { id: player.id },
           data: { providerPlayerId: overrideId },
         })
 
-        matched.push({
-          playerId: player.id,
-          fullName: player.fullName,
-          providerPlayerId: overrideId,
-        })
-        continue
-      }
-
-      if (existing.fullName === player.fullName) {
         matched.push({
           playerId: player.id,
           fullName: player.fullName,
@@ -154,14 +145,14 @@ async function ensureProviderIds(): Promise<MatchResult[]> {
     const normalizedLocal = normalize(searchName)
 
     const exactMatches = results.filter(
-      (r) => normalize(r.fullName) === normalizedLocal
+      (result) => normalize(result.fullName) === normalizedLocal,
     )
 
     if (exactMatches.length !== 1) {
       console.warn(
         `Skipping ambiguous/no match for ${player.fullName}. Matches: ${results
-          .map((r) => r.fullName)
-          .join(", ")}`
+          .map((result) => result.fullName)
+          .join(", ")}`,
       )
 
       matched.push({
@@ -176,12 +167,12 @@ async function ensureProviderIds(): Promise<MatchResult[]> {
 
     const existing = await prisma.player.findFirst({
       where: { providerPlayerId: String(best.id) },
-      select: { fullName: true },
+      select: { id: true, fullName: true },
     })
 
-    if (existing) {
+    if (existing && existing.id !== player.id) {
       console.warn(
-        `Skipping ${player.fullName}: MLB ID already assigned to ${existing.fullName}`
+        `Skipping ${player.fullName}: MLB ID already assigned to ${existing.fullName}`,
       )
 
       matched.push({
@@ -196,6 +187,8 @@ async function ensureProviderIds(): Promise<MatchResult[]> {
       where: { id: player.id },
       data: {
         providerPlayerId: String(best.id),
+        mlbTeam: best.currentTeam?.name ?? undefined,
+        primaryPosition: best.primaryPosition?.abbreviation ?? undefined,
       },
     })
 
@@ -214,7 +207,9 @@ export async function importMlbSnapshotsForToday(seasonYear = 2026) {
     where: { year: seasonYear },
   })
 
-  if (!season) throw new Error(`Season ${seasonYear} not found`)
+  if (!season) {
+    throw new Error(`Season ${seasonYear} not found`)
+  }
 
   const matchedPlayers = await ensureProviderIds()
   const snapshotDate = new Date()
@@ -222,9 +217,18 @@ export async function importMlbSnapshotsForToday(seasonYear = 2026) {
   let imported = 0
 
   for (const row of matchedPlayers) {
-    if (!row.providerPlayerId) continue
+    if (!row.providerPlayerId) {
+      continue
+    }
 
-    const stats = await getPlayerSeasonStats(Number(row.providerPlayerId), seasonYear)
+    const stats = await getPlayerSeasonSnapshot(Number(row.providerPlayerId), seasonYear)
+
+    await prisma.player.update({
+      where: { id: row.playerId },
+      data: {
+        mlbTeam: stats.teamCode ?? undefined,
+      },
+    })
 
     await prisma.playerStatSnapshot.upsert({
       where: {
@@ -236,6 +240,7 @@ export async function importMlbSnapshotsForToday(seasonYear = 2026) {
       },
       update: {
         homeRuns: stats.homeRuns,
+        gamesPlayed: stats.gamesPlayed,
         atBats: stats.atBats,
         sluggingPct: stats.sluggingPct,
         teamCode: stats.teamCode,
@@ -246,6 +251,7 @@ export async function importMlbSnapshotsForToday(seasonYear = 2026) {
         playerId: row.playerId,
         snapshotDate,
         homeRuns: stats.homeRuns,
+        gamesPlayed: stats.gamesPlayed,
         atBats: stats.atBats,
         sluggingPct: stats.sluggingPct,
         teamCode: stats.teamCode,
