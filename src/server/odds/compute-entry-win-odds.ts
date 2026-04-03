@@ -295,9 +295,10 @@ async function estimateRemainingHomeRuns({
     safeDivide(historicalAtBats, historicalGamesPlayed) ??
     DEFAULT_AB_PER_GAME
 
-  const projectedTotalGames = projectionAtBats && projectionAtBats > 0
-    ? Math.max(0, projectionAtBats / abPerGame)
-    : 162
+  const projectedTotalGames =
+    projectionAtBats && projectionAtBats > 0
+      ? Math.max(0, projectionAtBats / abPerGame)
+      : 162
 
   const projectedRemainingGames = Math.max(0, projectedTotalGames - snapshotGamesPlayed)
 
@@ -402,12 +403,13 @@ function runSimulations(entries: SimulatedEntry[], simulations: number) {
       wins.set(winner.entryId, (wins.get(winner.entryId) ?? 0) + 1 / winners.length)
     }
 
-    const ranked = [...totals].sort((a, b) => b.totalHomeRuns - a.totalHomeRuns)
-    const thirdScore = ranked[Math.min(2, ranked.length - 1)]?.totalHomeRuns ?? winningTotal
-    const topThreeFinishers = totals.filter((row) => row.totalHomeRuns >= thirdScore)
+    const rankByEntryId = buildCompetitionRanks(totals)
 
-    for (const finisher of topThreeFinishers) {
-      top3.set(finisher.entryId, (top3.get(finisher.entryId) ?? 0) + 1 / topThreeFinishers.length)
+    for (const row of totals) {
+      const rank = rankByEntryId.get(row.entryId) ?? Number.POSITIVE_INFINITY
+      if (rank <= 3) {
+        top3.set(row.entryId, (top3.get(row.entryId) ?? 0) + 1)
+      }
     }
   }
 
@@ -419,6 +421,33 @@ function runSimulations(entries: SimulatedEntry[], simulations: number) {
       expectedFinalHr: expectedFinalHr.get(entry.entryId) ?? entry.currentHomeRuns,
     }))
     .sort((a, b) => b.winProbability - a.winProbability)
+}
+
+function buildCompetitionRanks(
+  totals: Array<{ entryId: string; totalHomeRuns: number }>,
+) {
+  const sorted = [...totals].sort((a, b) => b.totalHomeRuns - a.totalHomeRuns)
+  const rankByEntryId = new Map<string, number>()
+
+  let currentRank = 1
+
+  for (let index = 0; index < sorted.length; ) {
+    const tiedScore = sorted[index].totalHomeRuns
+    const tiedRows: Array<{ entryId: string; totalHomeRuns: number }> = []
+
+    while (index < sorted.length && sorted[index].totalHomeRuns === tiedScore) {
+      tiedRows.push(sorted[index])
+      index += 1
+    }
+
+    for (const row of tiedRows) {
+      rankByEntryId.set(row.entryId, currentRank)
+    }
+
+    currentRank += tiedRows.length
+  }
+
+  return rankByEntryId
 }
 
 function samplePoisson(lambda: number) {
