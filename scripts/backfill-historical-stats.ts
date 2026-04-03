@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client"
-import { getPlayerSeasonStats } from "../src/server/stats/mlb-stats-api"
+import { getPlayerSeasonSnapshot } from "../src/server/stats/mlb-stats-api"
 
 const prisma = new PrismaClient()
 
@@ -27,7 +27,10 @@ async function backfillSeasonStats(seasonYear: number) {
     }
 
     try {
-      const stats = await getPlayerSeasonStats(Number(player.providerPlayerId), seasonYear)
+      const stats = await getPlayerSeasonSnapshot(
+        Number(player.providerPlayerId),
+        seasonYear,
+      )
 
       await prisma.historicalPlayerStat.upsert({
         where: {
