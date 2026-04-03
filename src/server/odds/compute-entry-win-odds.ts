@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma"
 import { ScoringPeriodType } from "@prisma/client"
-import { getPlayerSeasonSnapshot, getTeamGamesScheduledBetween } from "@/server/stats/mlb-stats-api"
+import {
+  getPlayerSeasonSnapshot,
+  getTeamGamesScheduledBetween,
+} from "@/server/stats/mlb-stats-api"
 
 const TOTAL_SIMULATIONS = 1500
 const POISSON_SCALE = 0.8
@@ -119,7 +122,10 @@ function getTargetScoringPeriods(
 ) {
   const now = new Date()
 
-  const seasonPeriod = scoringPeriods.find((period) => period.periodType === ScoringPeriodType.SEASON)
+  const seasonPeriod = scoringPeriods.find(
+    (period) => period.periodType === ScoringPeriodType.SEASON,
+  )
+
   const currentMonthly =
     scoringPeriods.find(
       (period) =>
@@ -128,7 +134,11 @@ function getTargetScoringPeriods(
         now <= period.endDate,
     ) ??
     scoringPeriods
-      .filter((period) => period.periodType === ScoringPeriodType.MONTHLY && now >= period.startDate)
+      .filter(
+        (period) =>
+          period.periodType === ScoringPeriodType.MONTHLY &&
+          now >= period.startDate,
+      )
       .sort((a, b) => b.sortOrder - a.sortOrder)[0]
 
   return [seasonPeriod, currentMonthly].filter(Boolean) as Array<{
@@ -199,8 +209,12 @@ async function loadSimulationInput({
     }),
   ])
 
-  const snapshotByPlayerId = new Map(latestSnapshots.map((snapshot) => [snapshot.playerId, snapshot]))
-  const projectionByPlayerId = new Map(projections.map((projection) => [projection.playerId, projection]))
+  const snapshotByPlayerId = new Map(
+    latestSnapshots.map((snapshot) => [snapshot.playerId, snapshot]),
+  )
+  const projectionByPlayerId = new Map(
+    projections.map((projection) => [projection.playerId, projection]),
+  )
   const simulatedAt = new Date()
 
   const playerForecastCache = new Map<string, number>()
@@ -227,9 +241,10 @@ async function loadSimulationInput({
           snapshotGamesPlayed: snapshot?.gamesPlayed ?? 0,
           historicalAtBats: historical?.atBats ?? null,
           historicalGamesPlayed: historical?.gamesPlayed ?? null,
-          scoringPeriodLabel: scoringPeriod.label,
+          scoringPeriodType: scoringPeriod.periodType,
           scoringPeriodStart: scoringPeriod.startDate,
           scoringPeriodEnd: scoringPeriod.endDate,
+          asOfDate: simulatedAt,
         })
 
         playerForecastCache.set(cacheKey, expectedRemainingHomeRuns)
@@ -263,9 +278,10 @@ async function estimateRemainingHomeRuns({
   snapshotGamesPlayed,
   historicalAtBats,
   historicalGamesPlayed,
-  scoringPeriodLabel,
+  scoringPeriodType,
   scoringPeriodStart,
   scoringPeriodEnd,
+  asOfDate,
 }: {
   providerPlayerId: string | null
   projectionHomeRuns: number | null
@@ -275,16 +291,20 @@ async function estimateRemainingHomeRuns({
   snapshotGamesPlayed: number
   historicalAtBats: number | null
   historicalGamesPlayed: number | null
-  scoringPeriodLabel: string
+  scoringPeriodType: ScoringPeriodType
   scoringPeriodStart: Date
   scoringPeriodEnd: Date
+  asOfDate: Date
 }) {
   if (!providerPlayerId) {
     return 0
   }
 
   const liveSnapshot = await getPlayerSeasonSnapshot(Number(providerPlayerId))
-  const availabilityStatus = classifyPlayerStatus(liveSnapshot.statusCode, liveSnapshot.statusDescription)
+  const availabilityStatus = classifyPlayerStatus(
+    liveSnapshot.statusCode,
+    liveSnapshot.statusDescription,
+  )
 
   if (availabilityStatus === IL_60_STATUS || availabilityStatus === MINORS_STATUS) {
     return 0
@@ -300,13 +320,20 @@ async function estimateRemainingHomeRuns({
       ? Math.max(0, projectionAtBats / abPerGame)
       : 162
 
-  const projectedRemainingGames = Math.max(0, projectedTotalGames - snapshotGamesPlayed)
+  const projectedRemainingGames = Math.max(
+    0,
+    projectedTotalGames - snapshotGamesPlayed,
+  )
 
   let teamGamesRemaining = 0
 
   if (liveSnapshot.teamId) {
-    const startDate = startOfToday()
-    const periodStart = scoringPeriodLabel === "Season" ? startDate : maxDate(startDate, scoringPeriodStart)
+    const startDate = startOfDay(asOfDate)
+    const periodStart =
+      scoringPeriodType === ScoringPeriodType.SEASON
+        ? startDate
+        : maxDate(startDate, scoringPeriodStart)
+
     teamGamesRemaining = await getTeamGamesScheduledBetween(
       liveSnapshot.teamId,
       periodStart,
@@ -320,37 +347,47 @@ async function estimateRemainingHomeRuns({
     remainingGames = Math.max(0, remainingGames - 10)
   }
 
-  const projectionWeight = getProjectionWeight(scoringPeriodLabel)
+  const projectionWeight = getCurrentProjectionWeight(asOfDate)
   const projectedHrPerGame =
-    projectionHomeRuns && projectedTotalGames > 0 ? projectionHomeRuns / projectedTotalGames : 0
+    projectionHomeRuns && projectedTotalGames > 0
+      ? projectionHomeRuns / projectedTotalGames
+      : 0
   const actualHrPerGame =
     snapshotGamesPlayed > 0 ? snapshotHomeRuns / snapshotGamesPlayed : 0
+
   const blendedHrPerGame =
-    projectedHrPerGame * projectionWeight + actualHrPerGame * (1 - projectionWeight)
+    projectedHrPerGame * projectionWeight +
+    actualHrPerGame * (1 - projectionWeight)
 
   return Math.max(0, blendedHrPerGame * remainingGames)
 }
 
-function getProjectionWeight(scoringPeriodLabel: string) {
-  switch (scoringPeriodLabel) {
-    case "Mar/Apr":
-      return 1
-    case "May":
-      return 0.75
-    case "June":
-      return 0.5
-    case "July":
-      return 0.25
-    case "August":
-    case "September":
-      return 0
-    case "Season":
-    default:
-      return 0.25
+function getCurrentProjectionWeight(asOfDate: Date) {
+  const month = asOfDate.getMonth() + 1
+
+  if (month <= 4) {
+    return 1
   }
+
+  if (month === 5) {
+    return 0.75
+  }
+
+  if (month === 6) {
+    return 0.5
+  }
+
+  if (month === 7) {
+    return 0.25
+  }
+
+  return 0
 }
 
-function classifyPlayerStatus(statusCode: string | null, statusDescription: string | null) {
+function classifyPlayerStatus(
+  statusCode: string | null,
+  statusDescription: string | null,
+) {
   const merged = `${statusCode ?? ""} ${statusDescription ?? ""}`.toLowerCase()
 
   if (merged.includes("60")) {
@@ -379,7 +416,10 @@ function runSimulations(entries: SimulatedEntry[], simulations: number) {
     expectedFinalHr.set(
       entry.entryId,
       entry.currentHomeRuns +
-        entry.players.reduce((sum, player) => sum + player.expectedRemainingHomeRuns, 0),
+        entry.players.reduce(
+          (sum, player) => sum + player.expectedRemainingHomeRuns,
+          0,
+        ),
     )
   }
 
@@ -474,11 +514,17 @@ function samplePoisson(lambda: number) {
 function sampleNormal(mean: number, stdDev: number) {
   const u1 = Math.random()
   const u2 = Math.random()
-  const z0 = Math.sqrt(-2 * Math.log(Math.max(u1, Number.EPSILON))) * Math.cos(2 * Math.PI * u2)
+  const z0 =
+    Math.sqrt(-2 * Math.log(Math.max(u1, Number.EPSILON))) *
+    Math.cos(2 * Math.PI * u2)
+
   return mean + z0 * stdDev
 }
 
-function safeDivide(numerator: number | null | undefined, denominator: number | null | undefined) {
+function safeDivide(
+  numerator: number | null | undefined,
+  denominator: number | null | undefined,
+) {
   if (!numerator || !denominator || denominator <= 0) {
     return null
   }
@@ -486,9 +532,8 @@ function safeDivide(numerator: number | null | undefined, denominator: number | 
   return numerator / denominator
 }
 
-function startOfToday() {
-  const now = new Date()
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate())
 }
 
 function maxDate(a: Date, b: Date) {
