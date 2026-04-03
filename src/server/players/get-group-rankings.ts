@@ -1,6 +1,60 @@
 import { prisma } from "@/lib/prisma"
-import { assignRanksDescending } from "@/server/scoring/assign-ranks"
 import { getProjectedHomeRunsForDisplay } from "@/server/forecast/player-projection"
+
+type RankedPlayerRow = {
+  id: string
+  fullName: string
+  mlbTeam: string | null
+  score: number
+  projectedScore: number | null
+  pickPercentage: number
+  rank: number
+  isTied: boolean
+}
+
+function rankRowsByScore(
+  rows: Array<{
+    id: string
+    fullName: string
+    mlbTeam: string | null
+    score: number
+    projectedScore: number | null
+    pickPercentage: number
+  }>,
+): RankedPlayerRow[] {
+  const sorted = [...rows].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.fullName.localeCompare(b.fullName)
+  })
+
+  const ranked: RankedPlayerRow[] = []
+
+  let currentRank = 1
+
+  for (let index = 0; index < sorted.length; ) {
+    const tiedScore = sorted[index].score
+    const tiedRows: typeof sorted = []
+
+    while (index < sorted.length && sorted[index].score === tiedScore) {
+      tiedRows.push(sorted[index])
+      index += 1
+    }
+
+    const isTied = tiedRows.length > 1
+
+    for (const row of tiedRows) {
+      ranked.push({
+        ...row,
+        rank: currentRank,
+        isTied,
+      })
+    }
+
+    currentRank += tiedRows.length
+  }
+
+  return ranked
+}
 
 export async function getGroupRankings(groupCode: string, periodLabel: string) {
   const group = await prisma.group.findFirst({
@@ -70,7 +124,7 @@ export async function getGroupRankings(groupCode: string, periodLabel: string) {
 
   const projectedScoreMap = new Map(projectedScores)
 
-  const ranked = assignRanksDescending(
+  const ranked = rankRowsByScore(
     group.seasonPlayers.map((row) => {
       const actualHomeRuns = row.player.periodStats[0]?.homeRuns ?? 0
       const pickCount = pickCountMap.get(row.player.id) ?? 0
@@ -85,10 +139,7 @@ export async function getGroupRankings(groupCode: string, periodLabel: string) {
         pickPercentage,
       }
     }),
-  ).sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score
-    return a.fullName.localeCompare(b.fullName)
-  })
+  )
 
   return {
     group: {
