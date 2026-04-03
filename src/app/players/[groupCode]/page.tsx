@@ -35,6 +35,7 @@ export default async function GroupPlayersPage({
               <th className="px-5 py-3">Player</th>
               <th className="px-5 py-3">Team</th>
               <th className="px-5 py-3">HR</th>
+              <th className="px-5 py-3">Projected HR</th>
               <th className="px-5 py-3">Pick %</th>
             </tr>
           </thead>
@@ -45,6 +46,11 @@ export default async function GroupPlayersPage({
                 <td className="px-5 py-4">{row.fullName}</td>
                 <td className="px-5 py-4">{row.mlbTeam ?? "—"}</td>
                 <td className="px-5 py-4">{row.score}</td>
+                <td className="px-5 py-4">
+                  {typeof row.projectedScore === "number"
+                    ? row.projectedScore.toFixed(1)
+                    : "--"}
+                </td>
                 <td className="px-5 py-4">
                   {typeof row.pickPercentage === "number"
                     ? `${(row.pickPercentage * 100).toFixed(1)}%`
