@@ -81,7 +81,15 @@ export default async function OddsPage({
 
               return (
                 <Link key={period.id} href={`/odds?period=${slug}`}>
-                  <Badge variant={active ? "default" : "secondary"}>{period.label}</Badge>
+                  <span
+                    className={
+                      active
+                        ? "inline-flex rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1 text-sm text-white"
+                        : "inline-flex rounded-full border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-50"
+                    }
+                  >
+                    {period.label}
+                  </span>
                 </Link>
               )
             })}
@@ -108,7 +116,10 @@ export default async function OddsPage({
         <>
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold">{odds.period.label}</h2>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">{odds.period.label}</h2>
+                <Badge>{odds.rows.length} entries</Badge>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">

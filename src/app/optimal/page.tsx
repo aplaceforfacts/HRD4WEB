@@ -95,7 +95,15 @@ export default async function OptimalPage({
 
               return (
                 <Link key={period.id} href={`/optimal?period=${slug}`}>
-                  <Badge variant={active ? "default" : "secondary"}>{period.label}</Badge>
+                  <span
+                    className={
+                      active
+                        ? "inline-flex rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1 text-sm text-white"
+                        : "inline-flex rounded-full border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-50"
+                    }
+                  >
+                    {period.label}
+                  </span>
                 </Link>
               )
             })}
