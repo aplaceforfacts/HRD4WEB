@@ -72,6 +72,7 @@ export async function getGroupRankings(groupCode: string, periodLabel: string) {
 
   const ranked = assignRanksDescending(
     group.seasonPlayers.map((row) => {
+      const actualHomeRuns = row.player.periodStats[0]?.homeRuns ?? 0
       const pickCount = pickCountMap.get(row.player.id) ?? 0
       const pickPercentage = totalEntries > 0 ? pickCount / totalEntries : 0
 
@@ -79,12 +80,15 @@ export async function getGroupRankings(groupCode: string, periodLabel: string) {
         id: row.player.id,
         fullName: row.player.fullName,
         mlbTeam: row.player.mlbTeam,
-        score: row.player.periodStats[0]?.homeRuns ?? 0,
+        score: actualHomeRuns,
         projectedScore: projectedScoreMap.get(row.player.id) ?? null,
         pickPercentage,
       }
     }),
-  )
+  ).sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.fullName.localeCompare(b.fullName)
+  })
 
   return {
     group: {
