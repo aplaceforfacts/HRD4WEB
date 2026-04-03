@@ -24,6 +24,36 @@ function formatPercent(value: number) {
   return `${(value * 100).toFixed(1)}%`
 }
 
+function withEntryRanks<T extends { homeRuns: number }>(rows: T[]) {
+  const ranked: Array<T & { rank: number; isTied: boolean }> = []
+
+  let currentRank = 1
+
+  for (let index = 0; index < rows.length; ) {
+    const tiedScore = rows[index].homeRuns
+    const tiedRows: T[] = []
+
+    while (index < rows.length && rows[index].homeRuns === tiedScore) {
+      tiedRows.push(rows[index])
+      index += 1
+    }
+
+    const isTied = tiedRows.length > 1
+
+    for (const row of tiedRows) {
+      ranked.push({
+        ...row,
+        rank: currentRank,
+        isTied,
+      })
+    }
+
+    currentRank += tiedRows.length
+  }
+
+  return ranked
+}
+
 export default async function StandingsPeriodPage({ params }: PageProps) {
   const { period } = await params
 
@@ -64,7 +94,16 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
             owner: true,
             players: {
               include: {
-                player: true,
+                player: {
+                  include: {
+                    periodStats: {
+                      where: {
+                        scoringPeriodId: scoringPeriod.id,
+                      },
+                      take: 1,
+                    },
+                  },
+                },
               },
             },
           },
@@ -95,22 +134,30 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
     picksByPlayer.map((row) => [row.playerId, row._count.playerId])
   )
 
-  const rows = scores.map((row, index) => {
-    const selectedPlayers = row.entry.players.map((entryPlayer) => {
-      const pickCount = pickCountMap.get(entryPlayer.playerId) ?? 0
-      const pickPercentage = totalEntries > 0 ? pickCount / totalEntries : 0
+  const baseRows = scores.map((row) => {
+    const selectedPlayers = row.entry.players
+      .map((entryPlayer) => {
+        const periodStat = entryPlayer.player.periodStats[0] ?? null
+        const pickCount = pickCountMap.get(entryPlayer.playerId) ?? 0
+        const pickPercentage = totalEntries > 0 ? pickCount / totalEntries : 0
 
-      return {
-        id: entryPlayer.player.id,
-        fullName: entryPlayer.player.fullName,
-        mlbTeam: entryPlayer.player.mlbTeam,
-        pickPercentage,
-      }
-    })
+        return {
+          id: entryPlayer.player.id,
+          fullName: entryPlayer.player.fullName,
+          mlbTeam: entryPlayer.player.mlbTeam,
+          pickPercentage,
+          homeRuns: periodStat?.homeRuns ?? 0,
+          groupRank: periodStat?.rankInGroup ?? null,
+          isTied: periodStat?.isTied ?? false,
+        }
+      })
+      .sort((a, b) => {
+        if (b.homeRuns !== a.homeRuns) return b.homeRuns - a.homeRuns
+        return a.fullName.localeCompare(b.fullName)
+      })
 
     return {
       id: row.id,
-      rank: index + 1,
       ownerName: row.entry.owner.name,
       entryId: row.entry.id,
       homeRuns: row.homeRuns,
@@ -118,6 +165,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
     }
   })
 
+  const rows = withEntryRanks(baseRows)
   const oddsRows = oddsBoard?.rows?.slice(0, 5) ?? []
   const periodSlug = periodLabelToSlug(scoringPeriod.label)
 
