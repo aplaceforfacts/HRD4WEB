@@ -40,9 +40,7 @@ export default async function HomePage() {
 
   const [seasonOdds, currentPeriodOdds] = await Promise.all([
     getOddsBoard("Season", 2026).catch(() => null),
-    currentMonthly
-      ? getOddsBoard(currentMonthly.label, 2026).catch(() => null)
-      : null,
+    currentMonthly ? getOddsBoard(currentMonthly.label, 2026).catch(() => null) : null,
   ])
 
   const topSeasonRows = seasonOdds?.rows.slice(0, 3) ?? []
@@ -51,14 +49,6 @@ export default async function HomePage() {
   return (
     <div className="space-y-10">
       <section className="hero-surface p-8 md:p-12">
-        <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[36%] overflow-hidden md:block">
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: "url('/hero-image-crop.jpg')" }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-l from-white/0 via-white/45 to-white" />
-        </div>
-
         <div className="relative z-10 max-w-3xl space-y-5">
           <Badge>2026 Season</Badge>
 
@@ -86,6 +76,15 @@ export default async function HomePage() {
             </div>
           </div>
         </div>
+
+        <div
+          className="pointer-events-none absolute inset-y-0 right-0 hidden w-[36%] overflow-hidden rounded-r-[2rem] bg-cover bg-center xl:block"
+          style={{
+            backgroundImage: "url('/hero-image-crop.jpg')",
+            WebkitMaskImage: "linear-gradient(to left, black 70%, transparent 100%)",
+            maskImage: "linear-gradient(to left, black 70%, transparent 100%)",
+          }}
+        />
       </section>
 
       <section className="space-y-4">
@@ -98,7 +97,10 @@ export default async function HomePage() {
                   Highest current chances to win the full season.
                 </p>
               </div>
-              <Link href="/odds?period=season" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">
+              <Link
+                href="/odds?period=season"
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+              >
                 View all
               </Link>
             </div>
@@ -158,7 +160,9 @@ export default async function HomePage() {
             </div>
 
             {topCurrentRows.length === 0 ? (
-              <div className="text-sm text-slate-500">No current-period odds available yet.</div>
+              <div className="text-sm text-slate-500">
+                No current-period odds available yet.
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="data-table">
