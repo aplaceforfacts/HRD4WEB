@@ -76,6 +76,8 @@ const PROVIDER_ID_OVERRIDES: Record<string, string> = {
   "Zack Dezenzo": "700270",
   "Christian Coss": "683766",
   "Sung Mun Song": "823550",
+  "Max Muncy (A's)": "691777",
+  "Jose Fernandez": "699912",
 }
 
 function isPlaceholder(name: string) {
