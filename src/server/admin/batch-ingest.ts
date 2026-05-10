@@ -54,8 +54,6 @@ type PlayerOption = {
   groupCode: string
 }
 
-const GROUP_CODES = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"] as const
-
 const NAME_ALIASES = new Map<string, string>([
   ["vinnie pasquantiono", "vinnie pasquantino"],
   ["brett batty", "brett baty"],
@@ -67,6 +65,14 @@ const NAME_ALIASES = new Map<string, string>([
   ["zach mckinstery", "zach mckinstry"],
   ["jarred kelenk", "jarred kelenic"],
 ])
+
+const SAME_NAME_PLAYER_DISPLAY_NAMES = new Map<string, string>([
+  ["Max Muncy A's", "Max Muncy (A's)"],
+])
+
+function getStoredPlayerName(sourceName: string, fullName: string) {
+  return SAME_NAME_PLAYER_DISPLAY_NAMES.get(sourceName) ?? fullName
+}
 
 function normalizeText(value: string) {
   return value
@@ -83,6 +89,19 @@ function normalizeText(value: string) {
 function normalizeName(value: string) {
   const normalized = normalizeText(value)
   return NAME_ALIASES.get(normalized) ?? normalized
+}
+
+function normalizedPlayerKeys(player: PlayerOption) {
+  const keys = new Set([normalizeName(player.fullName)])
+
+  if (player.mlbTeam) {
+    keys.add(normalizeName(`${player.fullName} ${player.mlbTeam}`))
+    const withoutParenthetical = player.fullName.replace(/\s+\([^)]*\)$/, "")
+    keys.add(normalizeName(withoutParenthetical))
+    keys.add(normalizeName(`${withoutParenthetical} ${player.mlbTeam}`))
+  }
+
+  return keys
 }
 
 function parsePick(raw: string) {
@@ -129,12 +148,12 @@ function createPlayerResolver(players: PlayerOption[], payload: BatchIngestPaylo
 
     const exactNameAndTeam = groupPlayers.find(
       (player) =>
-        normalizeName(player.fullName) === wantedName &&
+        normalizedPlayerKeys(player).has(wantedName) &&
         (!wantedTeam || normalizeText(player.mlbTeam ?? "") === wantedTeam),
     )
     if (exactNameAndTeam) return exactNameAndTeam
 
-    const exactName = groupPlayers.filter((player) => normalizeName(player.fullName) === wantedName)
+    const exactName = groupPlayers.filter((player) => normalizedPlayerKeys(player).has(wantedName))
     if (exactName.length === 1) return exactName[0]
 
     return null
@@ -191,7 +210,7 @@ async function ensurePlayersToAdd(payload: BatchIngestPayload, commit: boolean) 
     if (!group) throw new Error(`Group ${playerInput.groupCode} not found.`)
 
     const existingSeasonPlayer = group.seasonPlayers.find(
-      (row) => normalizeName(row.player.fullName) === normalizeName(playerInput.fullName),
+      (row) => normalizeName(row.player.fullName) === normalizeName(getStoredPlayerName(playerInput.sourceName, playerInput.fullName)),
     )
 
     if (existingSeasonPlayer) {
@@ -205,13 +224,13 @@ async function ensurePlayersToAdd(payload: BatchIngestPayload, commit: boolean) 
 
     await prisma.$transaction(async (tx) => {
       const player = await tx.player.upsert({
-        where: { fullName: playerInput.fullName },
+        where: { fullName: getStoredPlayerName(playerInput.sourceName, playerInput.fullName) },
         update: {
           mlbTeam: playerInput.mlbTeam,
           isActive: true,
         },
         create: {
-          fullName: playerInput.fullName,
+          fullName: getStoredPlayerName(playerInput.sourceName, playerInput.fullName),
           mlbTeam: playerInput.mlbTeam,
           isActive: true,
         },
@@ -280,12 +299,12 @@ async function resolveEntries(payload: BatchIngestPayload, includeVirtualPlayers
         !playerOptions.some(
           (option) =>
             option.groupCode === player.groupCode &&
-            normalizeName(option.fullName) === normalizeName(player.fullName),
+            normalizeName(option.fullName) === normalizeName(getStoredPlayerName(player.sourceName, player.fullName)),
         )
       ) {
         playerOptions.push({
           id: `dry-run:${player.groupCode}:${player.fullName}`,
-          fullName: player.fullName,
+          fullName: getStoredPlayerName(player.sourceName, player.fullName),
           mlbTeam: player.mlbTeam,
           groupCode: player.groupCode,
         })
