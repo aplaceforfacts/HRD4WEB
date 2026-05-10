@@ -1,23 +1,23 @@
 import { prisma } from "@/lib/prisma"
 import { assignRanksDescending } from "./assign-ranks"
 
-async function getLatestSnapshotOnOrBefore(playerId: string, seasonId: string, date: Date) {
-  return prisma.playerStatSnapshot.findFirst({
-    where: {
-      playerId,
-      seasonId,
-      snapshotDate: { lte: date },
-    },
-    orderBy: { snapshotDate: "desc" },
-  })
-}
-
 async function getLatestSnapshotBefore(playerId: string, seasonId: string, date: Date) {
   return prisma.playerStatSnapshot.findFirst({
     where: {
       playerId,
       seasonId,
       snapshotDate: { lt: date },
+    },
+    orderBy: { snapshotDate: "desc" },
+  })
+}
+
+async function getLatestSnapshotAtOrBefore(playerId: string, seasonId: string, date: Date) {
+  return prisma.playerStatSnapshot.findFirst({
+    where: {
+      playerId,
+      seasonId,
+      snapshotDate: { lte: date },
     },
     orderBy: { snapshotDate: "desc" },
   })
@@ -38,8 +38,8 @@ export async function calculatePlayerPeriodStats(seasonId: string, scoringPeriod
   if (!period) throw new Error("Scoring period not found.")
 
   for (const row of seasonPlayers) {
-    const endSnapshot = await getLatestSnapshotOnOrBefore(row.playerId, seasonId, period.endDate)
-    const beforeSnapshot = await getLatestSnapshotBefore(row.playerId, seasonId, period.startDate)
+    const endSnapshot = await getLatestSnapshotBefore(row.playerId, seasonId, period.endDate)
+    const beforeSnapshot = await getLatestSnapshotAtOrBefore(row.playerId, seasonId, period.startDate)
 
     const homeRuns = Math.max(0, (endSnapshot?.homeRuns ?? 0) - (beforeSnapshot?.homeRuns ?? 0))
     const atBats = Math.max(0, (endSnapshot?.atBats ?? 0) - (beforeSnapshot?.atBats ?? 0))

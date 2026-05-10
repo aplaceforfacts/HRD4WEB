@@ -36,13 +36,13 @@ async function main() {
   }
 
   const periods = [
-    ["Mar/Apr", "2026-03-25T00:00:00.000Z", "2026-04-30T23:59:59.999Z", 1, ScoringPeriodType.MONTHLY],
-    ["May", "2026-05-01T00:00:00.000Z", "2026-05-31T23:59:59.999Z", 2, ScoringPeriodType.MONTHLY],
-    ["June", "2026-06-01T00:00:00.000Z", "2026-06-30T23:59:59.999Z", 3, ScoringPeriodType.MONTHLY],
-    ["July", "2026-07-01T00:00:00.000Z", "2026-07-31T23:59:59.999Z", 4, ScoringPeriodType.MONTHLY],
-    ["August", "2026-08-01T00:00:00.000Z", "2026-08-31T23:59:59.999Z", 5, ScoringPeriodType.MONTHLY],
-    ["September", "2026-09-01T00:00:00.000Z", "2026-10-01T23:59:59.999Z", 6, ScoringPeriodType.MONTHLY],
-    ["Season", "2026-03-25T00:00:00.000Z", "2026-10-01T23:59:59.999Z", 7, ScoringPeriodType.SEASON],
+    ["Mar/Apr", "2026-03-25T04:00:00.000Z", "2026-05-01T10:00:00.000Z", 1, ScoringPeriodType.MONTHLY],
+    ["May", "2026-05-01T10:00:00.000Z", "2026-06-01T10:00:00.000Z", 2, ScoringPeriodType.MONTHLY],
+    ["June", "2026-06-01T10:00:00.000Z", "2026-07-01T10:00:00.000Z", 3, ScoringPeriodType.MONTHLY],
+    ["July", "2026-07-01T10:00:00.000Z", "2026-08-01T10:00:00.000Z", 4, ScoringPeriodType.MONTHLY],
+    ["August", "2026-08-01T10:00:00.000Z", "2026-09-01T10:00:00.000Z", 5, ScoringPeriodType.MONTHLY],
+    ["September", "2026-09-01T10:00:00.000Z", "2026-10-01T10:00:00.000Z", 6, ScoringPeriodType.MONTHLY],
+    ["Season", "2026-03-25T04:00:00.000Z", "2026-10-01T10:00:00.000Z", 7, ScoringPeriodType.SEASON],
   ] as const
 
   for (const [label, startDate, endDate, sortOrder, periodType] of periods) {

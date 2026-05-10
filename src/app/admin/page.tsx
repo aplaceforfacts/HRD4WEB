@@ -30,6 +30,17 @@ export default async function AdminPage() {
           <div className="mt-1 text-lg font-semibold">{season.entries.length}</div>
         </div>
       </div>
+      <div className="flex flex-wrap gap-3">
+        <a className="rounded-lg border border-neutral-900 px-4 py-2 text-sm font-medium" href="/admin/batch-ingest">
+          Batch ingest
+        </a>
+        <a className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium" href="/admin/sync">
+          Sync
+        </a>
+        <a className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium" href="/admin/snapshots">
+          Snapshots
+        </a>
+      </div>
     </div>
   )
 }

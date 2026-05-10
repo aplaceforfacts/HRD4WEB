@@ -131,7 +131,7 @@ function getTargetScoringPeriods(
       (period) =>
         period.periodType === ScoringPeriodType.MONTHLY &&
         now >= period.startDate &&
-        now <= period.endDate,
+        now < period.endDate,
     ) ??
     scoringPeriods
       .filter(

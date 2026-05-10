@@ -42,7 +42,7 @@ export async function getProjectedHomeRunsForDisplay({
       (period) =>
         period.periodType === ScoringPeriodType.MONTHLY &&
         asOfDate >= period.startDate &&
-        asOfDate <= period.endDate,
+        asOfDate < period.endDate,
     ) ??
     scoringPeriods
       .filter(
