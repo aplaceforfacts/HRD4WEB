@@ -8,6 +8,8 @@ type SyncResult = {
   importedSnapshots?: number
   periodsProcessed?: number
   oddsPeriodsProcessed?: number
+  maxMuncyLadId?: string
+  maxMuncyAsId?: string
 }
 
 export function AdminSyncForm() {
@@ -42,6 +44,32 @@ export function AdminSyncForm() {
     }
   }
 
+  async function repairMaxMuncy() {
+    setPending(true)
+    setError(null)
+    setResult(null)
+
+    try {
+      const response = await fetch("/api/admin/repair/max-muncy", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${secret}`,
+        },
+      })
+      const data = (await response.json()) as SyncResult
+
+      if (!response.ok) {
+        throw new Error(data.message ?? "Repair failed.")
+      }
+
+      setResult(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown repair error")
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
     <div className="max-w-xl space-y-4 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
       <label className="block space-y-2">
@@ -63,12 +91,27 @@ export function AdminSyncForm() {
         {pending ? "Running sync..." : "Run scoring sync"}
       </button>
 
+      <button
+        className="ml-2 rounded-lg border border-neutral-300 bg-white px-5 py-2.5 text-sm font-medium text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
+        type="button"
+        disabled={pending || !secret}
+        onClick={repairMaxMuncy}
+      >
+        Repair Max Muncy
+      </button>
+
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div> : null}
 
       {result ? (
         <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          Sync complete. Imported snapshots: {result.importedSnapshots ?? 0}. Periods processed:{" "}
-          {result.periodsProcessed ?? 0}. Odds periods processed: {result.oddsPeriodsProcessed ?? 0}.
+          {result.maxMuncyAsId ? (
+            <>Repair complete. Run scoring sync next.</>
+          ) : (
+            <>
+              Sync complete. Imported snapshots: {result.importedSnapshots ?? 0}. Periods processed:{" "}
+              {result.periodsProcessed ?? 0}. Odds periods processed: {result.oddsPeriodsProcessed ?? 0}.
+            </>
+          )}
         </div>
       ) : null}
     </div>
