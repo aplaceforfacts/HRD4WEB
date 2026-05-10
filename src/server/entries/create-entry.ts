@@ -11,6 +11,19 @@ type CreateEntryInput = {
 }
 
 export async function createEntry(input: CreateEntryInput) {
+  const season = await prisma.season.findUnique({
+    where: { id: input.seasonId },
+    select: { entryStatus: true },
+  })
+
+  if (!season) {
+    throw new Error("Season not found.")
+  }
+
+  if (season.entryStatus !== "OPEN") {
+    throw new Error("Entry submissions are closed.")
+  }
+
   const validation = validateEntry(input.selections)
   if (!validation.isValid) {
     throw new Error(validation.errors.join(" "))

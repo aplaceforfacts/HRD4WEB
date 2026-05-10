@@ -10,6 +10,9 @@ type SyncResult = {
   oddsPeriodsProcessed?: number
   maxMuncyLadId?: string
   maxMuncyAsId?: string
+  season?: {
+    entryStatus?: string
+  }
 }
 
 export function AdminSyncForm() {
@@ -70,6 +73,32 @@ export function AdminSyncForm() {
     }
   }
 
+  async function lockEntries() {
+    setPending(true)
+    setError(null)
+    setResult(null)
+
+    try {
+      const response = await fetch("/api/admin/season/lock-entries", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${secret}`,
+        },
+      })
+      const data = (await response.json()) as SyncResult
+
+      if (!response.ok) {
+        throw new Error(data.message ?? "Lock failed.")
+      }
+
+      setResult(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown lock error")
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
     <div className="max-w-xl space-y-4 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
       <label className="block space-y-2">
@@ -100,12 +129,23 @@ export function AdminSyncForm() {
         Repair Max Muncy
       </button>
 
+      <button
+        className="ml-2 rounded-lg border border-neutral-300 bg-white px-5 py-2.5 text-sm font-medium text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
+        type="button"
+        disabled={pending || !secret}
+        onClick={lockEntries}
+      >
+        Lock entries
+      </button>
+
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div> : null}
 
       {result ? (
         <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
           {result.maxMuncyAsId ? (
             <>Repair complete. Run scoring sync next.</>
+          ) : result.season?.entryStatus ? (
+            <>Entries locked. Current status: {result.season.entryStatus}.</>
           ) : (
             <>
               Sync complete. Imported snapshots: {result.importedSnapshots ?? 0}. Periods processed:{" "}

@@ -12,7 +12,7 @@ async function main() {
       entryDeadlineAt: new Date("2026-03-24T23:59:59.999Z"),
       regularSeasonStart: new Date("2026-03-25T00:00:00.000Z"),
       regularSeasonEnd: new Date("2026-10-01T23:59:59.999Z"),
-      entryStatus: SeasonStatus.SETUP,
+      entryStatus: SeasonStatus.LOCKED,
     },
   })
 
