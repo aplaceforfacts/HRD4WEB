@@ -10,6 +10,7 @@ const ACTIVE_STATUS = "ACTIVE"
 const IL_10_STATUS = "IL_10"
 const IL_60_STATUS = "IL_60"
 const MINORS_STATUS = "MINORS"
+const SUSPENDED_STATUS = "SUSPENDED"
 
 export async function getProjectedHomeRunsForDisplay({
   seasonId,
@@ -146,7 +147,11 @@ async function estimateRemainingHomeRuns({
     liveSnapshot.statusDescription,
   )
 
-  if (availabilityStatus === IL_60_STATUS || availabilityStatus === MINORS_STATUS) {
+  if (
+    availabilityStatus === IL_60_STATUS ||
+    availabilityStatus === MINORS_STATUS ||
+    availabilityStatus === SUSPENDED_STATUS
+  ) {
     return 0
   }
 
@@ -224,6 +229,10 @@ function classifyPlayerStatus(
   }
   if (merged.includes("minors") || merged.includes("optioned")) {
     return MINORS_STATUS
+  }
+
+  if (merged.includes("suspend") || merged.includes("restricted")) {
+    return SUSPENDED_STATUS
   }
 
   return ACTIVE_STATUS
