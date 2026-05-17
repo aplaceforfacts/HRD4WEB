@@ -3,6 +3,7 @@ import { calculateEntryPeriodScores } from "@/server/scoring/calculate-entry-per
 import { calculatePlayerPeriodStats } from "@/server/scoring/calculate-player-period-stats"
 import { computeOptimalLineup } from "@/server/scoring/compute-optimal-lineup"
 import { computeEntryWinOdds } from "@/server/odds/compute-entry-win-odds"
+import { writeLifecycleSnapshots } from "@/server/standings/lifecycle-snapshots"
 import { importMlbSnapshotsForToday } from "./import-mlb-snapshots"
 
 export async function runDailySync(seasonYear = 2026) {
@@ -24,6 +25,7 @@ export async function runDailySync(seasonYear = 2026) {
   }
 
   const oddsResult = await computeEntryWinOdds(seasonYear)
+  const lifecycleSnapshotResult = await writeLifecycleSnapshots({ season })
 
   return {
     ok: true,
@@ -32,5 +34,10 @@ export async function runDailySync(seasonYear = 2026) {
     periodsProcessed: season.scoringPeriods.length,
     oddsPeriodsProcessed: oddsResult.periodsProcessed,
     oddsSummaries: oddsResult.summaries,
+    lifecycleSnapshotPeriodsProcessed: lifecycleSnapshotResult.periodsProcessed,
+    openingProjectionSnapshots:
+      lifecycleSnapshotResult.openingProjectionSnapshots,
+    standingSnapshots: lifecycleSnapshotResult.standingSnapshots,
+    lifecycleSnapshotSummaries: lifecycleSnapshotResult.summaries,
   }
 }

@@ -20,6 +20,7 @@ type StandingRow = {
   ownerName: string
   entryId: string
   homeRuns: number
+  rankMovement?: number | null
   selectedPlayers: RowPlayer[]
 }
 
@@ -53,6 +54,7 @@ function formatGroupRank(rank: number | null, isTied: boolean) {
 
 export function StandingsTable({ rows }: { rows: StandingRow[] }) {
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
+  const showMovement = rows.some((row) => row.rankMovement !== undefined)
 
   function toggleRow(rowId: string) {
     setExpandedRows((prev) => ({
@@ -75,6 +77,9 @@ export function StandingsTable({ rows }: { rows: StandingRow[] }) {
         <thead className="bg-neutral-50">
           <tr className="border-b border-neutral-200 text-left text-neutral-500">
             <th className="px-5 py-3 font-medium">Rank</th>
+            {showMovement ? (
+              <th className="px-5 py-3 font-medium">Move</th>
+            ) : null}
             <th className="px-5 py-3 font-medium">Owner</th>
             <th className="px-5 py-3 font-medium text-right">HR</th>
             <th className="px-5 py-3 font-medium text-right">Roster</th>
@@ -90,6 +95,7 @@ export function StandingsTable({ rows }: { rows: StandingRow[] }) {
                 key={row.id}
                 row={row}
                 isExpanded={isExpanded}
+                showMovement={showMovement}
                 onToggle={() => toggleRow(row.id)}
               />
             )
@@ -103,18 +109,28 @@ export function StandingsTable({ rows }: { rows: StandingRow[] }) {
 function FragmentRow({
   row,
   isExpanded,
+  showMovement,
   onToggle,
 }: {
   row: StandingRow
   isExpanded: boolean
+  showMovement: boolean
   onToggle: () => void
 }) {
+  const movement = formatMovement(row.rankMovement)
+
   return (
     <>
       <tr className="border-b border-neutral-100 align-middle">
         <td className="px-5 py-4 font-semibold">
           {formatStandingRank(row.rank, row.isTied)}
         </td>
+
+        {showMovement ? (
+          <td className="px-5 py-4">
+            <span className={movement.className}>{movement.label}</span>
+          </td>
+        ) : null}
 
         <td className="px-5 py-4">
           <Link
@@ -142,7 +158,7 @@ function FragmentRow({
 
       {isExpanded ? (
         <tr className="border-b border-neutral-100 bg-neutral-50 last:border-0">
-          <td colSpan={4} className="px-5 py-4">
+          <td colSpan={showMovement ? 5 : 4} className="px-5 py-4">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-2">
               {row.selectedPlayers.map((player) => (
                 <div
@@ -183,4 +199,25 @@ function FragmentRow({
       ) : null}
     </>
   )
+}
+
+function formatMovement(rankMovement: number | null | undefined) {
+  if (rankMovement === undefined || rankMovement === null || rankMovement === 0) {
+    return {
+      label: "—",
+      className: "font-semibold tabular-nums text-neutral-400",
+    }
+  }
+
+  if (rankMovement > 0) {
+    return {
+      label: `↑ ${rankMovement}`,
+      className: "font-semibold tabular-nums text-emerald-700",
+    }
+  }
+
+  return {
+    label: `↓ ${Math.abs(rankMovement)}`,
+    className: "font-semibold tabular-nums text-red-700",
+  }
 }

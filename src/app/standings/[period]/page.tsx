@@ -9,6 +9,10 @@ import {
   orderPeriodsForStandings,
 } from "@/lib/periods"
 import { getOddsBoard } from "@/server/odds/get-entry-win-odds"
+import {
+  getBiggestSurprises,
+  getPreviousRankByEntryId,
+} from "@/server/standings/lifecycle-snapshots"
 
 export const dynamic = "force-dynamic"
 
@@ -27,6 +31,11 @@ function normalizePeriodSlug(value: string) {
 
 function formatPercent(value: number) {
   return `${(value * 100).toFixed(1)}%`
+}
+
+function formatSignedHr(value: number) {
+  const formatted = Math.abs(value).toFixed(1)
+  return `${value >= 0 ? "+" : "-"}${formatted} HR`
 }
 
 function withEntryRanks<T extends { homeRuns: number }>(rows: T[]) {
@@ -88,8 +97,17 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
   }
 
   const periodIsActive = isPeriodActive(scoringPeriod)
+  const showLifecycleFeatures =
+    periodIsActive && scoringPeriod.periodType === "MONTHLY"
 
-  const [scores, totalEntries, picksByPlayer, oddsBoard] = await Promise.all([
+  const [
+    scores,
+    totalEntries,
+    picksByPlayer,
+    oddsBoard,
+    previousRankByEntryId,
+    biggestSurprises,
+  ] = await Promise.all([
     prisma.entryPeriodScore.findMany({
       where: {
         seasonId: season.id,
@@ -135,6 +153,12 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
       },
     }),
     periodIsActive ? getOddsBoard(scoringPeriod.label, 2026).catch(() => null) : null,
+    showLifecycleFeatures
+      ? getPreviousRankByEntryId({ scoringPeriodId: scoringPeriod.id })
+      : new Map<string, number>(),
+    showLifecycleFeatures
+      ? getBiggestSurprises({ scoringPeriodId: scoringPeriod.id })
+      : [],
   ])
 
   const pickCountMap = new Map<string, number>(
@@ -172,7 +196,18 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
     }
   })
 
-  const rows = withEntryRanks(baseRows)
+  const rows = withEntryRanks(baseRows).map((row) => {
+    const previousRank = previousRankByEntryId.get(row.entryId)
+
+    if (typeof previousRank !== "number") {
+      return row
+    }
+
+    return {
+      ...row,
+      rankMovement: previousRank - row.rank,
+    }
+  })
   const oddsRows = oddsBoard?.rows?.slice(0, 5) ?? []
   const periodSlug = periodLabelToSlug(scoringPeriod.label)
   const orderedPeriods = orderPeriodsForStandings(season.scoringPeriods)
@@ -273,6 +308,28 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      ) : null}
+
+      {biggestSurprises.length > 0 ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+          <div className="text-sm font-medium uppercase tracking-wide text-emerald-800">
+            Biggest Surprise
+          </div>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            {biggestSurprises.map((row) => (
+              <Link
+                key={row.entryId}
+                href={`/team/${row.entryId}?period=${periodSlug}`}
+                className="text-lg font-semibold text-emerald-950 hover:underline"
+              >
+                {row.ownerName}
+              </Link>
+            ))}
+            <span className="text-sm font-medium text-emerald-900">
+              {formatSignedHr(biggestSurprises[0].surpriseHomeRuns)} vs opening projection
+            </span>
           </div>
         </div>
       ) : null}

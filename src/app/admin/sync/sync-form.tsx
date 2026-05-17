@@ -8,6 +8,8 @@ type SyncResult = {
   importedSnapshots?: number
   periodsProcessed?: number
   oddsPeriodsProcessed?: number
+  openingProjectionSnapshots?: number
+  standingSnapshots?: number
   maxMuncyLadId?: string
   maxMuncyAsId?: string
   season?: {
@@ -150,6 +152,8 @@ export function AdminSyncForm() {
             <>
               Sync complete. Imported snapshots: {result.importedSnapshots ?? 0}. Periods processed:{" "}
               {result.periodsProcessed ?? 0}. Odds periods processed: {result.oddsPeriodsProcessed ?? 0}.
+              Opening projections: {result.openingProjectionSnapshots ?? 0}. Rank snapshots:{" "}
+              {result.standingSnapshots ?? 0}.
             </>
           )}
         </div>
