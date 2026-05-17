@@ -3,6 +3,11 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { periodLabelToSlug } from "@/lib/utils"
 import { StandingsTable } from "@/components/standings-table"
+import {
+  getPeriodLifecycleStatus,
+  isPeriodActive,
+  orderPeriodsForStandings,
+} from "@/lib/periods"
 import { getOddsBoard } from "@/server/odds/get-entry-win-odds"
 
 export const dynamic = "force-dynamic"
@@ -82,6 +87,8 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
     notFound()
   }
 
+  const periodIsActive = isPeriodActive(scoringPeriod)
+
   const [scores, totalEntries, picksByPlayer, oddsBoard] = await Promise.all([
     prisma.entryPeriodScore.findMany({
       where: {
@@ -127,7 +134,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
         playerId: true,
       },
     }),
-    getOddsBoard(scoringPeriod.label, 2026).catch(() => null),
+    periodIsActive ? getOddsBoard(scoringPeriod.label, 2026).catch(() => null) : null,
   ])
 
   const pickCountMap = new Map<string, number>(
@@ -168,6 +175,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
   const rows = withEntryRanks(baseRows)
   const oddsRows = oddsBoard?.rows?.slice(0, 5) ?? []
   const periodSlug = periodLabelToSlug(scoringPeriod.label)
+  const orderedPeriods = orderPeriodsForStandings(season.scoringPeriods)
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -188,7 +196,7 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {season.scoringPeriods.map((item) => {
+            {orderedPeriods.map((item) => {
               const isActive = item.id === scoringPeriod.id
               const href = `/standings/${normalizePeriodSlug(item.label)}`
 
@@ -210,12 +218,14 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/odds?period=${periodSlug}`}
-            className="rounded-full border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-          >
-            View win odds
-          </Link>
+          {periodIsActive ? (
+            <Link
+              href={`/odds?period=${periodSlug}`}
+              className="rounded-full border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+            >
+              View win odds
+            </Link>
+          ) : null}
           <Link
             href={`/optimal?period=${periodSlug}`}
             className="rounded-full border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
@@ -224,6 +234,12 @@ export default async function StandingsPeriodPage({ params }: PageProps) {
           </Link>
         </div>
       </div>
+
+      {getPeriodLifecycleStatus(scoringPeriod) !== "active" ? (
+        <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm text-neutral-600">
+          {scoringPeriod.label} is complete, so win odds and projections are hidden.
+        </div>
+      ) : null}
 
       {oddsRows.length > 0 ? (
         <div className="rounded-2xl border border-neutral-200 bg-white shadow-sm">

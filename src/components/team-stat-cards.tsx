@@ -6,20 +6,29 @@ export function TeamStatCards({
   leaderHomeRuns,
   gapToLeader,
   gapToOptimal,
+  isFinal = false,
 }: {
   myHomeRuns: number
   myRank: number | null
   leaderHomeRuns: number
   gapToLeader: number
   gapToOptimal: number
+  isFinal?: boolean
 }) {
-  const cards = [
-    { label: "Your HR", value: myHomeRuns },
-    { label: "Your rank", value: myRank ?? "—" },
-    { label: "Leader HR", value: leaderHomeRuns },
-    { label: "Gap to leader", value: gapToLeader },
-    { label: "Gap to optimal", value: gapToOptimal },
-  ]
+  const cards = isFinal
+    ? [
+        { label: "Final HR", value: myHomeRuns },
+        { label: "Final rank", value: myRank ?? "—" },
+        { label: "Winner HR", value: leaderHomeRuns },
+        { label: "Final gap", value: gapToLeader },
+      ]
+    : [
+        { label: "Your HR", value: myHomeRuns },
+        { label: "Your rank", value: myRank ?? "—" },
+        { label: "Leader HR", value: leaderHomeRuns },
+        { label: "Gap to leader", value: gapToLeader },
+        { label: "Gap to optimal", value: gapToOptimal },
+      ]
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

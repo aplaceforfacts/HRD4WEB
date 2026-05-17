@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { isPeriodActive } from "@/lib/periods"
 
 type EntrySimulationRow = {
   entryId: string
@@ -34,6 +35,14 @@ export async function computeWinProbabilities(periodLabel = "Season", simulation
   })
 
   if (!scoringPeriod) throw new Error(`Scoring period not found for ${periodLabel}`)
+  if (!isPeriodActive(scoringPeriod)) {
+    return {
+      scoringPeriodId: scoringPeriod.id,
+      periodLabel,
+      simulations: 0,
+      results: [],
+    }
+  }
 
   const entries = await prisma.entry.findMany({
     where: { seasonId: scoringPeriod.seasonId },

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { EntrySearch } from "@/components/entry-search"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { isPeriodActive } from "@/lib/periods"
 import { periodLabelToSlug } from "@/lib/utils"
 import { getOddsBoard } from "@/server/odds/get-entry-win-odds"
 
@@ -28,22 +29,14 @@ export default async function HomePage() {
     season?.scoringPeriods.find(
       (period) =>
         period.periodType === "MONTHLY" &&
-        now >= period.startDate &&
-        now <= period.endDate,
+        isPeriodActive(period, now),
     ) ??
-    season?.scoringPeriods
-      .filter(
-        (period) => period.periodType === "MONTHLY" && now >= period.startDate,
-      )
-      .sort((a, b) => b.sortOrder - a.sortOrder)[0] ??
     null
 
-  const [seasonOdds, currentPeriodOdds] = await Promise.all([
-    getOddsBoard("Season", 2026).catch(() => null),
-    currentMonthly ? getOddsBoard(currentMonthly.label, 2026).catch(() => null) : null,
-  ])
+  const currentPeriodOdds = currentMonthly
+    ? await getOddsBoard(currentMonthly.label, 2026).catch(() => null)
+    : null
 
-  const topSeasonRows = seasonOdds?.rows.slice(0, 3) ?? []
   const topCurrentRows = currentPeriodOdds?.rows.slice(0, 3) ?? []
 
   return (
@@ -88,56 +81,6 @@ export default async function HomePage() {
       </section>
 
       <section className="space-y-4">
-        <Card>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-950">Top 3 Season odds</h2>
-                <p className="text-sm text-slate-500">
-                  Highest current chances to win the full season.
-                </p>
-              </div>
-              <Link
-                href="/odds?period=season"
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
-              >
-                View all
-              </Link>
-            </div>
-
-            {topSeasonRows.length === 0 ? (
-              <div className="text-sm text-slate-500">No season odds available yet.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Rank</th>
-                      <th>Owner</th>
-                      <th>Current HR</th>
-                      <th>Expected final HR</th>
-                      <th>Win %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topSeasonRows.map((row) => (
-                      <tr key={row.id}>
-                        <td className="font-semibold text-slate-900">{row.rank}</td>
-                        <td className="font-medium text-slate-900">{row.ownerName}</td>
-                        <td className="tabular-nums">{row.currentHomeRuns}</td>
-                        <td className="tabular-nums">{row.expectedFinalHr.toFixed(1)}</td>
-                        <td className="font-semibold tabular-nums text-indigo-700">
-                          {formatPercent(row.score)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         <Card>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between gap-3">

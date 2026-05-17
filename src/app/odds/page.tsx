@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { isPeriodActive } from "@/lib/periods"
 import { prisma } from "@/lib/prisma"
 import { periodLabelToSlug } from "@/lib/utils"
 import { getOddsBoard } from "@/server/odds/get-entry-win-odds"
@@ -43,8 +44,15 @@ export default async function OddsPage({
     season.scoringPeriods,
     params.period,
   )
+  const selectedPeriod = season.scoringPeriods.find(
+    (period) => period.label === selectedPeriodLabel,
+  )
+  const selectedIsActive = selectedPeriod ? isPeriodActive(selectedPeriod) : false
+  const activePeriods = season.scoringPeriods.filter((period) =>
+    isPeriodActive(period),
+  )
 
-  const odds = await getOddsBoard(selectedPeriodLabel, 2026)
+  const odds = selectedIsActive ? await getOddsBoard(selectedPeriodLabel, 2026) : null
 
   return (
     <div className="space-y-6">
@@ -75,7 +83,7 @@ export default async function OddsPage({
       <Card>
         <CardHeader className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            {season.scoringPeriods.map((period) => {
+            {activePeriods.map((period) => {
               const slug = periodLabelToSlug(period.label)
               const active = period.label === selectedPeriodLabel
 
@@ -98,13 +106,23 @@ export default async function OddsPage({
           <div>
             <h2 className="text-lg font-semibold">{selectedPeriodLabel} odds</h2>
             <p className="text-sm text-neutral-500">
-              Rankings are based on win probability. Ties share probability during simulation.
+              {selectedIsActive
+                ? "Rankings are based on win probability. Ties share probability during simulation."
+                : "This scoring period is complete, so win odds are hidden."}
             </p>
           </div>
         </CardHeader>
       </Card>
 
-      {!odds || odds.rows.length === 0 ? (
+      {!selectedIsActive ? (
+        <Card>
+          <CardContent>
+            <div className="text-neutral-600">
+              Completed and archived periods keep their final standings instead of stale win probabilities.
+            </div>
+          </CardContent>
+        </Card>
+      ) : !odds || odds.rows.length === 0 ? (
         <Card>
           <CardContent>
             <div className="text-neutral-600">

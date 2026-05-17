@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { isPeriodActive } from "@/lib/periods"
 import { ScoringPeriodType } from "@prisma/client"
 import {
   getPlayerSeasonSnapshot,
@@ -124,23 +125,17 @@ function getTargetScoringPeriods(
   const now = new Date()
 
   const seasonPeriod = scoringPeriods.find(
-    (period) => period.periodType === ScoringPeriodType.SEASON,
+    (period) =>
+      period.periodType === ScoringPeriodType.SEASON &&
+      isPeriodActive(period, now),
   )
 
   const currentMonthly =
     scoringPeriods.find(
       (period) =>
         period.periodType === ScoringPeriodType.MONTHLY &&
-        now >= period.startDate &&
-        now < period.endDate,
-    ) ??
-    scoringPeriods
-      .filter(
-        (period) =>
-          period.periodType === ScoringPeriodType.MONTHLY &&
-          now >= period.startDate,
-      )
-      .sort((a, b) => b.sortOrder - a.sortOrder)[0]
+        isPeriodActive(period, now),
+    )
 
   return [seasonPeriod, currentMonthly].filter(Boolean) as Array<{
     id: string
