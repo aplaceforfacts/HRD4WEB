@@ -322,6 +322,7 @@ model OptimalLineupPlayer {
   player        Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([optimalLineupId, groupId, slotNumber])
+  @@unique([optimalLineupId, playerId])
 }
 
 model EntryWinOdds {

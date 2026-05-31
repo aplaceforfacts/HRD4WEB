@@ -1,18 +1,45 @@
 import { prisma } from "@/lib/prisma"
 
+type OptimalLineupSelection = {
+  groupId: string
+  playerId: string
+  slotNumber: number
+  homeRuns: number
+  rankInGroup: number | null
+}
+
+function dedupeOptimalSelections(
+  scoringPeriodId: string,
+  selections: OptimalLineupSelection[],
+) {
+  const seenPlayerIds = new Set<string>()
+  const deduped: OptimalLineupSelection[] = []
+
+  for (const selection of selections) {
+    if (seenPlayerIds.has(selection.playerId)) {
+      console.warn("Skipping duplicate optimal lineup player", {
+        scoringPeriodId,
+        playerId: selection.playerId,
+        groupId: selection.groupId,
+        slotNumber: selection.slotNumber,
+      })
+      continue
+    }
+
+    seenPlayerIds.add(selection.playerId)
+    deduped.push(selection)
+  }
+
+  return deduped
+}
+
 export async function computeOptimalLineup(seasonId: string, scoringPeriodId: string) {
   const groups = await prisma.group.findMany({
     where: { seasonId },
     orderBy: { sortOrder: "asc" },
   })
 
-  const chosen: Array<{
-    groupId: string
-    playerId: string
-    slotNumber: number
-    homeRuns: number
-    rankInGroup: number | null
-  }> = []
+  const chosen: OptimalLineupSelection[] = []
 
   for (const group of groups) {
     const rankedPlayers = await prisma.playerPeriodStat.findMany({
@@ -20,10 +47,7 @@ export async function computeOptimalLineup(seasonId: string, scoringPeriodId: st
         scoringPeriodId,
         groupId: group.id,
       },
-      orderBy: [{ homeRuns: "desc" }, { player: { fullName: "asc" } }],
-      include: {
-        player: true,
-      },
+      orderBy: [{ homeRuns: "desc" }, { playerId: "asc" }],
     })
 
     if (group.code === "M") {
@@ -50,7 +74,8 @@ export async function computeOptimalLineup(seasonId: string, scoringPeriodId: st
     }
   }
 
-  const totalHomeRuns = chosen.reduce((sum, row) => sum + row.homeRuns, 0)
+  const dedupedChosen = dedupeOptimalSelections(scoringPeriodId, chosen)
+  const totalHomeRuns = dedupedChosen.reduce((sum, row) => sum + row.homeRuns, 0)
 
   return prisma.optimalLineup.upsert({
     where: { scoringPeriodId },
@@ -59,7 +84,7 @@ export async function computeOptimalLineup(seasonId: string, scoringPeriodId: st
       computedAt: new Date(),
       players: {
         deleteMany: {},
-        create: chosen,
+        create: dedupedChosen,
       },
     },
     create: {
@@ -68,7 +93,7 @@ export async function computeOptimalLineup(seasonId: string, scoringPeriodId: st
       totalHomeRuns,
       computedAt: new Date(),
       players: {
-        create: chosen,
+        create: dedupedChosen,
       },
     },
     include: {
