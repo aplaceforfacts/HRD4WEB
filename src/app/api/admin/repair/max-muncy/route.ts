@@ -96,12 +96,23 @@ async function repairMaxMuncy() {
     })
 
     if (marApr) {
+      const marAprSnapshotDate = new Date(marApr.endDate.getTime() - 1)
+
+      await tx.playerStatSnapshot.deleteMany({
+        where: {
+          seasonId: season.id,
+          playerId: maxMuncyLad.id,
+          snapshotDate: marAprSnapshotDate,
+          sourceName: "batch-ingest",
+        },
+      })
+
       await tx.playerStatSnapshot.upsert({
         where: {
           seasonId_playerId_snapshotDate: {
             seasonId: season.id,
             playerId: maxMuncyAs.id,
-            snapshotDate: new Date(marApr.endDate.getTime() - 1),
+            snapshotDate: marAprSnapshotDate,
           },
         },
         update: {
@@ -112,7 +123,7 @@ async function repairMaxMuncy() {
         create: {
           seasonId: season.id,
           playerId: maxMuncyAs.id,
-          snapshotDate: new Date(marApr.endDate.getTime() - 1),
+          snapshotDate: marAprSnapshotDate,
           teamCode: "A's",
           homeRuns: 2,
           sourceName: "batch-ingest-repair",
