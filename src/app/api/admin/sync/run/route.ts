@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { runDailySync } from "@/server/stats/run-daily-sync"
 
 export const dynamic = "force-dynamic"
+export const maxDuration = 300
 
 async function handleSync(request: NextRequest) {
   console.log("SYNC STARTED", {

@@ -1,127 +1,67 @@
 import { prisma } from "@/lib/prisma"
 import { assignRanksDescending } from "./assign-ranks"
+import { getPeriodGameDateRange } from "./scoring-period-windows"
 
-const TEAM_SCOPED_SNAPSHOT_SOURCES = ["batch-ingest", "batch-ingest-repair", "csv-import"]
-
-function teamCodeAliases(teamCode: string | null) {
-  if (!teamCode) return []
-
-  const normalized = teamCode.trim().toLowerCase()
-  if (["a's", "as", "ath", "oak", "athletics", "oakland athletics"].includes(normalized)) {
-    return ["A's", "AS", "ATH", "OAK", "Athletics", "Oakland Athletics"]
-  }
-
-  if (["lad", "la", "dodgers", "los angeles dodgers"].includes(normalized)) {
-    return ["LAD", "LA", "Dodgers", "Los Angeles Dodgers"]
-  }
-
-  return [teamCode]
-}
-
-function usableSnapshotWhere(playerTeamCode: string | null) {
-  const aliases = teamCodeAliases(playerTeamCode)
-
-  if (aliases.length === 0) return {}
-
-  return {
-    OR: [
-      { sourceName: { notIn: TEAM_SCOPED_SNAPSHOT_SOURCES } },
-      { teamCode: null },
-      { teamCode: { in: aliases } },
-    ],
-  }
-}
-
-async function getLatestSnapshotBefore(
-  playerId: string,
-  seasonId: string,
-  playerTeamCode: string | null,
-  date: Date,
-) {
-  return prisma.playerStatSnapshot.findFirst({
-    where: {
-      playerId,
-      seasonId,
-      snapshotDate: { lt: date },
-      ...usableSnapshotWhere(playerTeamCode),
-    },
-    orderBy: { snapshotDate: "desc" },
-  })
-}
-
-async function getLatestSnapshotAtOrBefore(
-  playerId: string,
-  seasonId: string,
-  playerTeamCode: string | null,
-  date: Date,
-) {
-  return prisma.playerStatSnapshot.findFirst({
-    where: {
-      playerId,
-      seasonId,
-      snapshotDate: { lte: date },
-      ...usableSnapshotWhere(playerTeamCode),
-    },
-    orderBy: { snapshotDate: "desc" },
-  })
-}
-
+/**
+ * A player's period line is the sum of his game-log rows whose official MLB game
+ * date falls inside the period. This matches how the league host counts (by game
+ * date) and needs no baseline snapshot, so late-added players and corrected MLB IDs
+ * score correctly for every past month as soon as their log is re-imported.
+ */
 export async function calculatePlayerPeriodStats(seasonId: string, scoringPeriodId: string) {
-  const [period, seasonPlayers] = await Promise.all([
+  const [period, season, seasonPlayers] = await Promise.all([
     prisma.scoringPeriod.findUnique({ where: { id: scoringPeriodId } }),
+    prisma.season.findUnique({ where: { id: seasonId }, select: { year: true } }),
     prisma.seasonPlayerGroup.findMany({
       where: { seasonId },
-      include: {
-        player: true,
-        group: true,
-      },
+      select: { playerId: true, groupId: true },
     }),
   ])
 
   if (!period) throw new Error("Scoring period not found.")
+  if (!season) throw new Error("Season not found.")
 
-  for (const row of seasonPlayers) {
-    const endSnapshot = await getLatestSnapshotBefore(
-      row.playerId,
-      seasonId,
-      row.player.mlbTeam,
-      period.endDate,
-    )
-    const beforeSnapshot = await getLatestSnapshotAtOrBefore(
-      row.playerId,
-      seasonId,
-      row.player.mlbTeam,
-      period.startDate,
-    )
+  const { from, to } = getPeriodGameDateRange(period)
 
-    const homeRuns = Math.max(0, (endSnapshot?.homeRuns ?? 0) - (beforeSnapshot?.homeRuns ?? 0))
-    const atBats = Math.max(0, (endSnapshot?.atBats ?? 0) - (beforeSnapshot?.atBats ?? 0))
+  const totals = await prisma.playerGameLog.groupBy({
+    by: ["playerId"],
+    where: {
+      seasonYear: season.year,
+      playerId: { in: seasonPlayers.map((row) => row.playerId) },
+      gameDate: { gte: from, lt: to },
+    },
+    _sum: { homeRuns: true, atBats: true, totalBases: true },
+  })
 
-    await prisma.playerPeriodStat.upsert({
-      where: {
-        playerId_scoringPeriodId: {
+  const totalsByPlayer = new Map(totals.map((row) => [row.playerId, row._sum]))
+
+  await prisma.$transaction(
+    seasonPlayers.map((row) => {
+      const sum = totalsByPlayer.get(row.playerId)
+      const homeRuns = sum?.homeRuns ?? 0
+      const atBats = sum?.atBats ?? 0
+      const sluggingPct = atBats > 0 ? (sum?.totalBases ?? 0) / atBats : null
+
+      return prisma.playerPeriodStat.upsert({
+        where: {
+          playerId_scoringPeriodId: {
+            playerId: row.playerId,
+            scoringPeriodId,
+          },
+        },
+        update: { seasonId, groupId: row.groupId, homeRuns, atBats, sluggingPct },
+        create: {
+          seasonId,
           playerId: row.playerId,
           scoringPeriodId,
+          groupId: row.groupId,
+          homeRuns,
+          atBats,
+          sluggingPct,
         },
-      },
-      update: {
-        seasonId,
-        groupId: row.groupId,
-        homeRuns,
-        atBats,
-        sluggingPct: endSnapshot?.sluggingPct ?? null,
-      },
-      create: {
-        seasonId,
-        playerId: row.playerId,
-        scoringPeriodId,
-        groupId: row.groupId,
-        homeRuns,
-        atBats,
-        sluggingPct: endSnapshot?.sluggingPct ?? null,
-      },
-    })
-  }
+      })
+    }),
+  )
 
   const groups = await prisma.group.findMany({ where: { seasonId } })
 
@@ -142,14 +82,16 @@ export async function calculatePlayerPeriodStats(seasonId: string, scoringPeriod
       })),
     )
 
-    for (const item of ranked) {
-      await prisma.playerPeriodStat.update({
-        where: { id: item.id },
-        data: {
-          rankInGroup: item.rank,
-          isTied: item.isTied,
-        },
-      })
-    }
+    await prisma.$transaction(
+      ranked.map((item) =>
+        prisma.playerPeriodStat.update({
+          where: { id: item.id },
+          data: {
+            rankInGroup: item.rank,
+            isTied: item.isTied,
+          },
+        }),
+      ),
+    )
   }
 }

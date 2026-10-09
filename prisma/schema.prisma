@@ -90,6 +90,7 @@ model Player {
   seasonGroups    SeasonPlayerGroup[]
   entryPlayers    EntryPlayer[]
   statSnapshots   PlayerStatSnapshot[]
+  gameLogs        PlayerGameLog[]
   periodStats     PlayerPeriodStat[]
   historicalStats HistoricalPlayerStat[]
   projections     PlayerProjection[]
@@ -249,6 +250,30 @@ model PlayerStatSnapshot {
 
   @@unique([seasonId, playerId, snapshotDate])
   @@index([seasonId, snapshotDate])
+}
+
+/// One row per player per MLB regular-season game, straight from the StatsAPI game log.
+/// This is the scoring source: a period's home runs are the sum over its game dates,
+/// so a late-added player, a corrected MLB ID or a missed sync day is fixed by simply
+/// re-importing the log. Keyed by year, not season, so leagues share it.
+model PlayerGameLog {
+  id          String   @id @default(cuid())
+  playerId    String
+  seasonYear  Int
+  gamePk      Int
+  /// MLB's official game date (the date the host's spreadsheet uses).
+  gameDate    DateTime @db.Date
+  teamId      Int?
+  homeRuns    Int      @default(0)
+  atBats      Int      @default(0)
+  totalBases  Int      @default(0)
+  importedAt  DateTime @default(now())
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, gamePk])
+  @@index([seasonYear, gameDate])
+  @@index([playerId, seasonYear])
 }
 
 model PlayerPeriodStat {

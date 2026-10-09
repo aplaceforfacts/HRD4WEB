@@ -1,7 +1,6 @@
 import { PaymentStatus, SubmissionMethod } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { applyScoringPeriodWindows } from "@/server/scoring/scoring-period-windows"
 
 const playerToAddSchema = z.object({
   groupCode: z.string().min(1),
@@ -473,7 +472,6 @@ async function createResolvedEntries(
 }
 
 export async function runBatchIngest(payload: BatchIngestPayload, commit: boolean) {
-  const cutoffResult = await applyScoringPeriodWindows(payload.seasonYear, commit)
   const playerResult = await ensurePlayersToAdd(payload, commit)
   const resolved = await resolveEntries(payload, !commit)
   const entryResult = await createResolvedEntries(resolved.season.id, resolved.resolvedEntries, commit)
@@ -487,7 +485,6 @@ export async function runBatchIngest(payload: BatchIngestPayload, commit: boolea
     ok,
     mode: commit ? "commit" : "dry-run",
     seasonYear: payload.seasonYear,
-    scoringPeriods: cutoffResult,
     players: {
       toAdd: playerResult.added.length,
       addedOrWouldAdd: playerResult.added,

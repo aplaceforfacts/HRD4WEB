@@ -57,7 +57,7 @@ const PROVIDER_ID_OVERRIDES: Record<string, string> = {
   "Luis Garcia": "671277",
   "Gabriel Arias": "672356",
   "Jacob Wilson": "805779",
-  "Joe Mack": "805734",
+  "Joe Mack": "691788",
   "Luis Matos": "682641",
   "JT Realmuto": "592663",
   "JP Crawford": "641487",
@@ -66,14 +66,13 @@ const PROVIDER_ID_OVERRIDES: Record<string, string> = {
   "Jesús Sánchez": "660821",
   "Jesus Sanchez": "660821",
   "Max Muncy": "571970",
-  "Pedro Pagés": "691912",
-  "Pedro Pages": "691912",
+  "Pedro Pagés": "686780",
+  "Pedro Pages": "686780",
   "Gio Urshela": "570482",
   "Giovanny Urshela": "570482",
   "Casey Schmitt": "669477",
   "Casey Schmidt": "669477",
-  "Zach Dezenzo": "700270",
-  "Zack Dezenzo": "700270",
+  "Zach Dezenzo": "701305",
   "Christian Coss": "683766",
   "Sung Mun Song": "823550",
   "Max Muncy (A's)": "691777",
@@ -101,6 +100,22 @@ async function ensureProviderIds(): Promise<MatchResult[]> {
   const matched: MatchResult[] = []
 
   for (const player of players) {
+    // An override is a hand-verified ID, so it also corrects an ID that an earlier
+    // name search stored wrongly (Pedro Pagés was tracked as a pitcher for all of 2026).
+    const verifiedId = PROVIDER_ID_OVERRIDES[player.fullName]
+    if (verifiedId && player.providerPlayerId && player.providerPlayerId !== verifiedId) {
+      const holder = await prisma.player.findFirst({
+        where: { providerPlayerId: verifiedId },
+        select: { id: true },
+      })
+
+      if (!holder) {
+        console.warn(`Correcting MLB ID for ${player.fullName}: ${player.providerPlayerId} -> ${verifiedId}`)
+        await prisma.player.update({ where: { id: player.id }, data: { providerPlayerId: verifiedId } })
+        player.providerPlayerId = verifiedId
+      }
+    }
+
     if (player.providerPlayerId) {
       matched.push({
         playerId: player.id,

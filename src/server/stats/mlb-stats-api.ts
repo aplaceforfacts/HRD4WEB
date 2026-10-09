@@ -227,6 +227,58 @@ export async function getPlayerSeasonSnapshot(
   }
 }
 
+export type PlayerGameLogRow = {
+  gamePk: number
+  /** MLB official game date, YYYY-MM-DD. */
+  gameDate: string
+  teamId: number | null
+  homeRuns: number
+  atBats: number
+  totalBases: number
+}
+
+/** Every regular-season game the player has appeared in this season, one row per game. */
+export async function getPlayerGameLog(playerId: number, season: number): Promise<PlayerGameLogRow[]> {
+  const data = await fetchJson(
+    `${MLB_BASE}/people/${playerId}/stats?stats=gameLog&group=hitting&season=${season}&gameType=R`,
+  )
+
+  const splits = (data?.stats?.[0]?.splits ?? []) as Array<Record<string, any>>
+  const rows: PlayerGameLogRow[] = []
+
+  for (const split of splits) {
+    const gamePk = split?.game?.gamePk
+    const gameDate = split?.date
+    if (typeof gamePk !== "number" || typeof gameDate !== "string") continue
+
+    rows.push({
+      gamePk,
+      gameDate,
+      teamId: typeof split?.team?.id === "number" ? split.team.id : null,
+      homeRuns: Number(split?.stat?.homeRuns ?? 0),
+      atBats: Number(split?.stat?.atBats ?? 0),
+      totalBases: Number(split?.stat?.totalBases ?? 0),
+    })
+  }
+
+  return rows
+}
+
+/** Opening day and final day of the MLB regular season, as YYYY-MM-DD. */
+export async function getRegularSeasonDates(season: number) {
+  const data = await fetchJson(`${MLB_BASE}/seasons/${season}?sportId=1`)
+  const row = data?.seasons?.[0]
+
+  if (!row?.regularSeasonStartDate || !row?.regularSeasonEndDate) {
+    throw new Error(`MLB has not published ${season} regular-season dates yet.`)
+  }
+
+  return {
+    startDate: String(row.regularSeasonStartDate),
+    endDate: String(row.regularSeasonEndDate),
+  }
+}
+
 type ScheduledGame = { startsAt: number; isFinal: boolean }
 
 function getTeamRegularSeasonGames(teamId: number, season: number) {

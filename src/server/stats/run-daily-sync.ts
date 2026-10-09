@@ -4,6 +4,7 @@ import { calculatePlayerPeriodStats } from "@/server/scoring/calculate-player-pe
 import { computeOptimalLineup } from "@/server/scoring/compute-optimal-lineup"
 import { computeEntryWinOdds } from "@/server/odds/compute-entry-win-odds"
 import { writeLifecycleSnapshots } from "@/server/standings/lifecycle-snapshots"
+import { importGameLogs } from "./import-game-logs"
 import { importMlbSnapshotsForToday } from "./import-mlb-snapshots"
 
 export async function runDailySync(seasonYear = 2026) {
@@ -17,6 +18,7 @@ export async function runDailySync(seasonYear = 2026) {
   }
 
   const snapshotResult = await importMlbSnapshotsForToday(seasonYear)
+  const gameLogResult = await importGameLogs(seasonYear, [season.id])
 
   for (const period of season.scoringPeriods) {
     await calculatePlayerPeriodStats(season.id, period.id)
@@ -31,6 +33,7 @@ export async function runDailySync(seasonYear = 2026) {
     ok: true,
     seasonYear,
     importedSnapshots: snapshotResult.imported,
+    gameLogs: gameLogResult,
     periodsProcessed: season.scoringPeriods.length,
     oddsPeriodsProcessed: oddsResult.periodsProcessed,
     oddsSummaries: oddsResult.summaries,
