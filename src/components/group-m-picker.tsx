@@ -25,10 +25,15 @@ type PlayerOption = {
 type GroupMPickerProps = {
   value: string[]
   options: PlayerOption[]
+  /** How many picks this group takes. */
+  limit: number
+  seasonYear: number
+  groupName: string
   onToggle: (playerId: string, checked: boolean) => void
 }
 
-export function GroupMPicker({ value, options, onToggle }: GroupMPickerProps) {
+/** Checkbox picker for a group that takes several players (Group M). */
+export function GroupMPicker({ value, options, limit, seasonYear, groupName, onToggle }: GroupMPickerProps) {
   const [query, setQuery] = useState("")
   const [teamFilter, setTeamFilter] = useState("all")
 
@@ -51,7 +56,7 @@ export function GroupMPicker({ value, options, onToggle }: GroupMPickerProps) {
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_200px]">
         <input
           className="rounded-xl border border-neutral-300 px-3 py-2.5"
-          placeholder="Search Group M players"
+          placeholder={`Search ${groupName} players`}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
@@ -76,17 +81,17 @@ export function GroupMPicker({ value, options, onToggle }: GroupMPickerProps) {
               <th className="px-4 py-3">Pick</th>
               <th className="px-4 py-3">Player</th>
               <th className="px-4 py-3">Team</th>
-              <th className="px-4 py-3">2025 HR</th>
-              <th className="px-4 py-3">2024 HR</th>
+              <th className="px-4 py-3">{seasonYear - 1} HR</th>
+              <th className="px-4 py-3">{seasonYear - 2} HR</th>
               <th className="px-4 py-3">Proj HR</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((player) => {
               const checked = value.includes(player.id)
-              const disabled = !checked && value.length >= 4
-              const stats2025 = player.historicalStats.find((s) => s.seasonYear === 2025)
-              const stats2024 = player.historicalStats.find((s) => s.seasonYear === 2024)
+              const disabled = !checked && value.length >= limit
+              const lastYear = player.historicalStats.find((s) => s.seasonYear === seasonYear - 1)
+              const twoYearsAgo = player.historicalStats.find((s) => s.seasonYear === seasonYear - 2)
               const projection = player.projections[0]
 
               return (
@@ -101,8 +106,8 @@ export function GroupMPicker({ value, options, onToggle }: GroupMPickerProps) {
                   </td>
                   <td className="px-4 py-3 font-medium">{player.fullName}</td>
                   <td className="px-4 py-3">{player.mlbTeam ?? "—"}</td>
-                  <td className="px-4 py-3">{stats2025?.homeRuns ?? "—"}</td>
-                  <td className="px-4 py-3">{stats2024?.homeRuns ?? "—"}</td>
+                  <td className="px-4 py-3">{lastYear?.homeRuns ?? "—"}</td>
+                  <td className="px-4 py-3">{twoYearsAgo?.homeRuns ?? "—"}</td>
                   <td className="px-4 py-3">{projection?.projectedHomeRuns ?? "—"}</td>
                 </tr>
               )

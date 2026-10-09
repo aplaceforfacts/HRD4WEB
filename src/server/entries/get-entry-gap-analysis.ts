@@ -1,27 +1,19 @@
 import { prisma } from "@/lib/prisma"
 
+type GapRow = {
+  groupCode: string
+  slotNumber: number
+  optimalPlayerName: string
+  optimalHomeRuns: number
+  yourPlayerName: string | null
+  yourHomeRuns: number
+  gap: number
+}
+
 export async function getEntryGapAnalysis(entryId: string, periodLabel = "Season") {
   const entry = await prisma.entry.findUnique({
     where: { id: entryId },
-    include: {
-      players: {
-        include: {
-          group: true,
-          player: {
-            include: {
-              periodStats: {
-                where: {
-                  scoringPeriod: {
-                    label: periodLabel,
-                    season: { year: 2026 },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    select: { id: true, seasonId: true },
   })
 
   if (!entry) return null
@@ -35,84 +27,75 @@ export async function getEntryGapAnalysis(entryId: string, periodLabel = "Season
 
   if (!scoringPeriod) return null
 
-  const optimal = await prisma.optimalLineup.findUnique({
-    where: { scoringPeriodId: scoringPeriod.id },
-    include: {
-      players: {
-        include: {
-          group: true,
-          player: true,
+  const [players, optimal] = await Promise.all([
+    prisma.entryPlayer.findMany({
+      where: { entryId },
+      include: {
+        group: true,
+        player: {
+          include: {
+            periodStats: { where: { scoringPeriodId: scoringPeriod.id } },
+          },
         },
       },
-    },
-  })
+    }),
+    prisma.optimalLineup.findUnique({
+      where: { scoringPeriodId: scoringPeriod.id },
+      include: {
+        players: {
+          include: {
+            group: true,
+            player: true,
+          },
+        },
+      },
+    }),
+  ])
 
   if (!optimal) return null
 
-  const myRows = entry.players.map((row) => ({
-    groupCode: row.group.code,
-    slotNumber: row.slotNumber,
-    playerName: row.player.fullName,
-    homeRuns: row.player.periodStats[0]?.homeRuns ?? 0,
-  }))
+  const byHomeRunsThenName = <T extends { homeRuns: number; name: string }>(a: T, b: T) =>
+    b.homeRuns - a.homeRuns || a.name.localeCompare(b.name)
 
-  const nonMRows = optimal.players
-    .filter((row) => row.group.code !== "M")
-    .map((optimalRow) => {
-      const matchingOwnPick = myRows.find(
-        (row) => row.groupCode === optimalRow.group.code,
-      )
-      const ownHomeRuns = matchingOwnPick?.homeRuns ?? 0
+  // Compare group by group: within a multi-pick group (Group M), the owner's best
+  // pick lines up against the optimal best, second against second, and so on.
+  const groups = new Map<string, { sortOrder: number; mine: Array<{ name: string; homeRuns: number }>; best: typeof optimal.players }>()
 
-      return {
-        groupCode: optimalRow.group.code,
-        slotNumber: optimalRow.slotNumber,
-        optimalPlayerName: optimalRow.player.fullName,
-        optimalHomeRuns: optimalRow.homeRuns,
-        yourPlayerName: matchingOwnPick?.playerName ?? null,
-        yourHomeRuns: ownHomeRuns,
-        gap: optimalRow.homeRuns - ownHomeRuns,
-      }
+  for (const row of optimal.players) {
+    const bucket = groups.get(row.group.code) ?? { sortOrder: row.group.sortOrder, mine: [], best: [] }
+    bucket.best.push(row)
+    groups.set(row.group.code, bucket)
+  }
+
+  for (const row of players) {
+    const bucket = groups.get(row.group.code)
+    if (!bucket) continue
+    bucket.mine.push({ name: row.player.fullName, homeRuns: row.player.periodStats[0]?.homeRuns ?? 0 })
+  }
+
+  const analysisRows: GapRow[] = [...groups.entries()]
+    .sort((a, b) => a[1].sortOrder - b[1].sortOrder)
+    .flatMap(([groupCode, bucket]) => {
+      const mine = [...bucket.mine].sort(byHomeRunsThenName)
+      const best = [...bucket.best]
+        .map((row) => ({ ...row, name: row.player.fullName }))
+        .sort(byHomeRunsThenName)
+
+      return best.map((optimalRow, index) => {
+        const ownPick = mine[index]
+        const ownHomeRuns = ownPick?.homeRuns ?? 0
+
+        return {
+          groupCode,
+          slotNumber: index + 1,
+          optimalPlayerName: optimalRow.name,
+          optimalHomeRuns: optimalRow.homeRuns,
+          yourPlayerName: ownPick?.name ?? null,
+          yourHomeRuns: ownHomeRuns,
+          gap: optimalRow.homeRuns - ownHomeRuns,
+        }
+      })
     })
-
-  const ownGroupMRows = myRows
-    .filter((row) => row.groupCode === "M")
-    .sort((a, b) => {
-      if (b.homeRuns !== a.homeRuns) return b.homeRuns - a.homeRuns
-      return a.playerName.localeCompare(b.playerName)
-    })
-
-  const optimalGroupMRows = optimal.players
-    .filter((row) => row.group.code === "M")
-    .sort((a, b) => {
-      if (b.homeRuns !== a.homeRuns) return b.homeRuns - a.homeRuns
-      return a.player.fullName.localeCompare(b.player.fullName)
-    })
-    .map((optimalRow, index) => {
-      const matchingOwnPick = ownGroupMRows[index]
-      const ownHomeRuns = matchingOwnPick?.homeRuns ?? 0
-
-      return {
-        groupCode: optimalRow.group.code,
-        slotNumber: optimalRow.slotNumber,
-        optimalPlayerName: optimalRow.player.fullName,
-        optimalHomeRuns: optimalRow.homeRuns,
-        yourPlayerName: matchingOwnPick?.playerName ?? null,
-        yourHomeRuns: ownHomeRuns,
-        gap: optimalRow.homeRuns - ownHomeRuns,
-      }
-    })
-
-  const analysisRows = [...nonMRows, ...optimalGroupMRows].sort((a, b) => {
-    if (a.groupCode === "M" && b.groupCode === "M") {
-      return a.slotNumber - b.slotNumber
-    }
-
-    if (a.groupCode === "M") return 1
-    if (b.groupCode === "M") return -1
-
-    return a.groupCode.localeCompare(b.groupCode)
-  })
 
   const totalGap = analysisRows.reduce((sum, row) => sum + Math.max(0, row.gap), 0)
 

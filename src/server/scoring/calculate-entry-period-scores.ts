@@ -2,72 +2,53 @@ import { prisma } from "@/lib/prisma"
 import { assignRanksDescending } from "./assign-ranks"
 
 export async function calculateEntryPeriodScores(seasonId: string, scoringPeriodId: string) {
-  const entries = await prisma.entry.findMany({
-    where: { seasonId },
-    include: {
-      players: true,
-    },
-  })
+  const [entries, stats] = await Promise.all([
+    prisma.entry.findMany({
+      where: { seasonId },
+      select: { id: true, teamName: true, players: { select: { playerId: true } } },
+    }),
+    prisma.playerPeriodStat.findMany({
+      where: { scoringPeriodId },
+      select: { playerId: true, homeRuns: true },
+    }),
+  ])
 
-  for (const entry of entries) {
-    const stats = await prisma.playerPeriodStat.findMany({
-      where: {
-        scoringPeriodId,
-        playerId: {
-          in: entry.players.map((player) => player.playerId),
+  const homeRunsByPlayer = new Map(stats.map((stat) => [stat.playerId, stat.homeRuns]))
+
+  const totals = entries
+    .map((entry) => ({
+      id: entry.id,
+      teamName: entry.teamName,
+      score: entry.players.reduce((sum, row) => sum + (homeRunsByPlayer.get(row.playerId) ?? 0), 0),
+    }))
+    .sort((a, b) => b.score - a.score || a.teamName.localeCompare(b.teamName))
+
+  const ranked = assignRanksDescending(totals)
+
+  await prisma.$transaction(
+    ranked.map((row) =>
+      prisma.entryPeriodScore.upsert({
+        where: {
+          entryId_scoringPeriodId: {
+            entryId: row.id,
+            scoringPeriodId,
+          },
         },
-      },
-      select: { homeRuns: true },
-    })
-
-    const homeRuns = stats.reduce((sum, stat) => sum + stat.homeRuns, 0)
-
-    await prisma.entryPeriodScore.upsert({
-      where: {
-        entryId_scoringPeriodId: {
-          entryId: entry.id,
+        update: {
+          seasonId,
+          homeRuns: row.score,
+          rank: row.rank,
+          isTied: row.isTied,
+        },
+        create: {
+          seasonId,
+          entryId: row.id,
           scoringPeriodId,
+          homeRuns: row.score,
+          rank: row.rank,
+          isTied: row.isTied,
         },
-      },
-      update: {
-        seasonId,
-        homeRuns,
-      },
-      create: {
-        seasonId,
-        entryId: entry.id,
-        scoringPeriodId,
-        homeRuns,
-      },
-    })
-  }
-
-  const scores = await prisma.entryPeriodScore.findMany({
-    where: { scoringPeriodId },
-    include: {
-      entry: {
-        include: {
-          owner: true,
-        },
-      },
-    },
-    orderBy: [{ homeRuns: "desc" }, { entry: { owner: { name: "asc" } } }],
-  })
-
-  const ranked = assignRanksDescending(
-    scores.map((score) => ({
-      id: score.id,
-      score: score.homeRuns,
-    })),
+      }),
+    ),
   )
-
-  for (const item of ranked) {
-    await prisma.entryPeriodScore.update({
-      where: { id: item.id },
-      data: {
-        rank: item.rank,
-        isTied: item.isTied,
-      },
-    })
-  }
 }

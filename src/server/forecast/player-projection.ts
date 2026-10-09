@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { ScoringPeriodType } from "@prisma/client"
+import { getSeasonToDateLines } from "@/server/stats/season-to-date"
 import { estimateRemainingHomeRuns } from "./remaining-home-runs"
 
 export async function getProjectedHomeRunsForDisplay({
@@ -52,7 +53,7 @@ export async function getProjectedHomeRunsForDisplay({
     return null
   }
 
-  const [periodStat, latestSnapshot, projection, historical] = await Promise.all([
+  const [periodStat, seasonLines, projection, historical] = await Promise.all([
     prisma.playerPeriodStat.findUnique({
       where: {
         playerId_scoringPeriodId: {
@@ -61,10 +62,7 @@ export async function getProjectedHomeRunsForDisplay({
         },
       },
     }),
-    prisma.playerStatSnapshot.findFirst({
-      where: { seasonId, playerId },
-      orderBy: { snapshotDate: "desc" },
-    }),
+    getSeasonToDateLines(seasonYear, [playerId]),
     prisma.playerProjection.findFirst({
       where: {
         playerId,
@@ -82,13 +80,15 @@ export async function getProjectedHomeRunsForDisplay({
 
   const currentHomeRuns = periodStat?.homeRuns ?? 0
 
-  const expectedRemainingHomeRuns = await estimateRemainingHomeRuns({
+  const line = seasonLines.get(playerId)
+
+  const forecast = await estimateRemainingHomeRuns({
     providerPlayerId,
     projectionHomeRuns: projection?.projectedHomeRuns ?? null,
     projectionAtBats: projection?.projectedAtBats ?? null,
-    snapshotHomeRuns: latestSnapshot?.homeRuns ?? 0,
-    snapshotAtBats: latestSnapshot?.atBats ?? 0,
-    snapshotGamesPlayed: latestSnapshot?.gamesPlayed ?? 0,
+    snapshotHomeRuns: line?.homeRuns ?? 0,
+    snapshotAtBats: line?.atBats ?? 0,
+    snapshotGamesPlayed: line?.gamesPlayed ?? 0,
     historicalAtBats: historical?.atBats ?? null,
     historicalGamesPlayed: historical?.gamesPlayed ?? null,
     seasonYear,
@@ -98,5 +98,5 @@ export async function getProjectedHomeRunsForDisplay({
     asOfDate,
   })
 
-  return currentHomeRuns + expectedRemainingHomeRuns
+  return currentHomeRuns + forecast.expectedRemainingHomeRuns
 }

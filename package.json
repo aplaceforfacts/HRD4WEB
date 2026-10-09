@@ -4,21 +4,25 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "postinstall": "prisma generate",
     "build": "next build",
     "start": "next start",
     "postinstall": "prisma generate",
     "lint": "next lint",
+    "test": "vitest run",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
-    "import:player-sheet:2026": "tsx scripts/import-player-sheet-2026.ts",
-    "import:historical-stats": "tsx scripts/import-historical-stats.ts",
+    "season:setup": "tsx scripts/setup-season.ts",
+    "season:import-workbook": "tsx scripts/import-host-workbook.ts",
+    "season:export-workbook": "tsx scripts/export-workbook.ts",
+    "sync": "tsx scripts/run-sync.ts",
     "import:projections": "tsx scripts/import-projections.ts",
     "backfill:historical-stats": "tsx scripts/backfill-historical-stats.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",
+    "exceljs": "^4.4.0",
     "next": "^15.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -33,7 +37,8 @@
     "prisma": "^6.6.0",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

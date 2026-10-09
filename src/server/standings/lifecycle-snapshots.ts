@@ -2,7 +2,6 @@ import { ScoringPeriodType } from "@prisma/client"
 import { isPeriodActive } from "@/lib/periods"
 import { prisma } from "@/lib/prisma"
 
-const FIRST_SNAPSHOT_MONTH_INDEX = 5
 const OPENING_PROJECTION_SOURCE = "win_odds_expected_final_hr"
 
 type ScoringPeriodForSnapshots = {
@@ -21,7 +20,7 @@ type SeasonForSnapshots = {
 
 export type BiggestSurpriseRow = {
   entryId: string
-  ownerName: string
+  teamName: string
   currentHomeRuns: number
   projectedHomeRuns: number
   surpriseHomeRuns: number
@@ -35,10 +34,6 @@ function addDays(value: Date, days: number) {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate() + days)
 }
 
-function isJuneForward(asOfDate: Date) {
-  return startOfLocalDay(asOfDate) >= new Date(asOfDate.getFullYear(), FIRST_SNAPSHOT_MONTH_INDEX, 1)
-}
-
 function activeMonthlyPeriods(
   periods: ScoringPeriodForSnapshots[],
   asOfDate: Date,
@@ -50,12 +45,20 @@ function activeMonthlyPeriods(
   )
 }
 
-function shouldWriteOpeningProjectionSnapshot(asOfDate: Date) {
-  return isJuneForward(asOfDate) && asOfDate.getDate() === 1
+/**
+ * The opening projection is taken on the period's first sync, whatever day that is
+ * (Mar/Apr opens on opening day, not the 1st), and never rewritten after that day.
+ */
+async function shouldWriteOpeningProjectionSnapshot(scoringPeriodId: string, snapshotDate: Date) {
+  const earlier = await prisma.entryOpeningProjectionSnapshot.findFirst({
+    where: { scoringPeriodId, snapshotDate: { lt: snapshotDate } },
+    select: { id: true },
+  })
+  return !earlier
 }
 
 function shouldWriteStandingSnapshot(asOfDate: Date) {
-  return isJuneForward(asOfDate) && asOfDate.getDate() >= 9
+  return asOfDate.getDate() >= 9
 }
 
 export async function writeLifecycleSnapshots({
@@ -76,7 +79,7 @@ export async function writeLifecycleSnapshots({
   }> = []
 
   for (const period of monthlyPeriods) {
-    const openingProjectionSnapshots = shouldWriteOpeningProjectionSnapshot(snapshotDate)
+    const openingProjectionSnapshots = (await shouldWriteOpeningProjectionSnapshot(period.id, snapshotDate))
       ? await writeOpeningProjectionSnapshots({
           seasonId: season.id,
           scoringPeriodId: period.id,
@@ -235,7 +238,7 @@ export async function getPreviousRankByEntryId({
 }) {
   const today = startOfLocalDay(asOfDate)
 
-  if (!isJuneForward(today) || today.getDate() < 10) {
+  if (today.getDate() < 10) {
     return new Map<string, number>()
   }
 
@@ -264,7 +267,6 @@ export async function getBiggestSurprises({
     include: {
       entry: {
         include: {
-          owner: true,
           periodScores: {
             where: { scoringPeriodId },
             take: 1,
@@ -281,7 +283,7 @@ export async function getBiggestSurprises({
 
       return {
         entryId: snapshot.entryId,
-        ownerName: snapshot.entry.owner.name,
+        teamName: snapshot.entry.teamName,
         currentHomeRuns,
         projectedHomeRuns: snapshot.projectedHomeRuns,
         surpriseHomeRuns,
@@ -292,7 +294,7 @@ export async function getBiggestSurprises({
         return b.surpriseHomeRuns - a.surpriseHomeRuns
       }
 
-      return a.ownerName.localeCompare(b.ownerName)
+      return a.teamName.localeCompare(b.teamName)
     })
 
   const topSurprise = rows[0]?.surpriseHomeRuns

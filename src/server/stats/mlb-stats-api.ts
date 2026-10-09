@@ -107,6 +107,12 @@ function getTeamDirectory(season: number) {
   })
 }
 
+/** MLB team id -> abbreviation ("NYY"), for labeling players by their latest club. */
+export async function getTeamAbbreviations(season: number) {
+  const directory = await getTeamDirectory(season)
+  return new Map([...directory.values()].map((team) => [team.id, team.abbreviation]))
+}
+
 type RosterEntry = {
   statusCode: string | null
   statusDescription: string | null

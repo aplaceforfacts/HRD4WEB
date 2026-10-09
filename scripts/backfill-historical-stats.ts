@@ -64,8 +64,13 @@ async function backfillSeasonStats(seasonYear: number) {
   return { seasonYear, imported, skipped }
 }
 
+// Usage: npx tsx scripts/backfill-historical-stats.ts <year> [year...]
+// Stores each pool player's full-season line for those years (shown on the entry form).
 async function main() {
-  const seasons = [2024, 2025]
+  const seasons = process.argv.slice(2).map(Number)
+  if (seasons.length === 0 || seasons.some((year) => !Number.isInteger(year))) {
+    throw new Error("Usage: npx tsx scripts/backfill-historical-stats.ts <year> [year...]")
+  }
   const results = []
 
   for (const seasonYear of seasons) {

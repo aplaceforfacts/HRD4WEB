@@ -1,13 +1,8 @@
 import { prisma } from "@/lib/prisma"
 
-export async function getOptimalLineupByPeriodLabel(periodLabel: string) {
-  const lineup = await prisma.optimalLineup.findFirst({
-    where: {
-      scoringPeriod: {
-        label: periodLabel,
-        season: { year: 2026 },
-      },
-    },
+export async function getOptimalLineup(scoringPeriodId: string) {
+  return prisma.optimalLineup.findUnique({
+    where: { scoringPeriodId },
     include: {
       players: {
         include: {
@@ -19,6 +14,4 @@ export async function getOptimalLineupByPeriodLabel(periodLabel: string) {
       scoringPeriod: true,
     },
   })
-
-  return lineup
 }

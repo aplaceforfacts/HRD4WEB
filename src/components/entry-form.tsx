@@ -40,22 +40,12 @@ type GroupData = {
 type SeasonData = {
   id: string
   name: string
+  year: number
   groups: GroupData[]
 }
 
 function getCompletion(groups: GroupData[], selections: Record<string, string[]>) {
-  let complete = 0
-
-  for (const group of groups) {
-    const selected = selections[group.code] ?? []
-    if (group.code === "M") {
-      if (selected.length === 4) complete += 1
-    } else if (selected.length === 1) {
-      complete += 1
-    }
-  }
-
-  return complete
+  return groups.filter((group) => (selections[group.code] ?? []).length === group.selectionCount).length
 }
 
 function getSelectedPlayers(group: GroupData, selections: Record<string, string[]>) {
@@ -66,6 +56,7 @@ function getSelectedPlayers(group: GroupData, selections: Record<string, string[
 }
 
 export function EntryForm({ season }: { season: SeasonData }) {
+  const [teamName, setTeamName] = useState("")
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [message, setMessage] = useState<string | null>(null)
@@ -90,16 +81,16 @@ export function EntryForm({ season }: { season: SeasonData }) {
     if (playerId) collapseGroup(groupCode)
   }
 
-  function updateMulti(groupCode: string, playerId: string, checked: boolean) {
+  function updateMulti(groupCode: string, limit: number, playerId: string, checked: boolean) {
     setSelections((prev) => {
       const current = prev[groupCode] ?? []
       const next = checked
-        ? [...current, playerId].slice(0, 4)
+        ? [...current, playerId].slice(0, limit)
         : current.filter((id) => id !== playerId)
 
       setCollapsedGroups((collapsed) => ({
         ...collapsed,
-        [groupCode]: next.length === 4,
+        [groupCode]: next.length === limit,
       }))
 
       return { ...prev, [groupCode]: next }
@@ -120,6 +111,7 @@ export function EntryForm({ season }: { season: SeasonData }) {
     try {
       const payload = {
         seasonId: season.id,
+        teamName,
         ownerName: name,
         ownerEmail: email,
         selections: Object.entries(selections).flatMap(([groupCode, ids]) =>
@@ -169,8 +161,18 @@ export function EntryForm({ season }: { season: SeasonData }) {
           </CardHeader>
 
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <input
+                id="entry-team-name"
+                className="rounded-xl border border-neutral-300 px-3 py-2.5"
+                placeholder="Team name"
+                value={teamName}
+                onChange={(event) => setTeamName(event.target.value)}
+                maxLength={60}
+                required
+              />
+              <input
+                id="entry-owner-name"
                 className="rounded-xl border border-neutral-300 px-3 py-2.5"
                 placeholder="Your name"
                 value={name}
@@ -178,6 +180,7 @@ export function EntryForm({ season }: { season: SeasonData }) {
                 required
               />
               <input
+                id="entry-owner-email"
                 className="rounded-xl border border-neutral-300 px-3 py-2.5"
                 placeholder="Your email"
                 type="email"
@@ -186,12 +189,17 @@ export function EntryForm({ season }: { season: SeasonData }) {
                 required
               />
             </div>
+            <p className="mt-3 text-xs text-neutral-500">
+              The standings workbook is emailed here a couple of days after each month. Entering several teams?
+              Use the same email for each.
+            </p>
           </CardContent>
         </Card>
 
         {groups.map((group) => {
           const selected = selections[group.code] ?? []
-          const isComplete = group.code === "M" ? selected.length === 4 : selected.length === 1
+          const isMulti = group.selectionCount > 1
+          const isComplete = selected.length === group.selectionCount
           const isCollapsed = collapsedGroups[group.code] && isComplete
           const options = group.seasonPlayers.map((row) => row.player)
           const selectedPlayers = getSelectedPlayers(group, selections)
@@ -203,16 +211,16 @@ export function EntryForm({ season }: { season: SeasonData }) {
                   <div>
                     <h3 className="text-lg font-semibold">{group.name}</h3>
                     <p className="mt-1 text-sm text-neutral-600">
-                      {group.code === "M"
-                        ? "Choose 4 players from the open pool."
+                      {isMulti
+                        ? `Choose ${group.selectionCount} players from the open pool.`
                         : "Choose 1 player from this category."}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <Badge className={isComplete ? "border-emerald-200 text-emerald-700" : ""}>
-                      {group.code === "M"
-                        ? `${selected.length} / 4 selected`
+                      {isMulti
+                        ? `${selected.length} / ${group.selectionCount} selected`
                         : isComplete
                           ? "Selected"
                           : "Not selected"}
@@ -245,11 +253,14 @@ export function EntryForm({ season }: { season: SeasonData }) {
                       ))}
                     </div>
                   </div>
-                ) : group.code === "M" ? (
+                ) : isMulti ? (
                   <GroupMPicker
                     value={selected}
                     options={options}
-                    onToggle={(playerId, checked) => updateMulti(group.code, playerId, checked)}
+                    limit={group.selectionCount}
+                    seasonYear={season.year}
+                    groupName={group.name}
+                    onToggle={(playerId, checked) => updateMulti(group.code, group.selectionCount, playerId, checked)}
                   />
                 ) : (
                   <PlayerPicker
@@ -257,6 +268,7 @@ export function EntryForm({ season }: { season: SeasonData }) {
                     options={options}
                     onChange={(playerId) => updateSingle(group.code, playerId)}
                     placeholder={`Search ${group.name}`}
+                    seasonYear={season.year}
                   />
                 )}
               </CardContent>
@@ -299,12 +311,7 @@ export function EntryForm({ season }: { season: SeasonData }) {
             <div className="space-y-2.5">
               {groups.map((group) => {
                 const selectedPlayers = getSelectedPlayers(group, selections)
-                const countLabel =
-                  group.code === "M"
-                    ? `${selectedPlayers.length}/4`
-                    : selectedPlayers.length
-                      ? "1/1"
-                      : "0/1"
+                const countLabel = `${selectedPlayers.length}/${group.selectionCount}`
 
                 return (
                   <div key={group.id} className="rounded-lg border border-neutral-200 p-2.5">

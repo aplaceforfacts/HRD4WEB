@@ -9,11 +9,10 @@ type Period = {
   slug: string
 }
 
-export function PeriodTabs({ periods }: { periods: Period[] }) {
+/** Period switcher that keeps the rest of the query string (e.g. ?season=). */
+export function PeriodTabs({ periods, current }: { periods: Period[]; current: string }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-
-  const current = searchParams.get("period") || "season"
 
   return (
     <div className="flex flex-wrap gap-2">

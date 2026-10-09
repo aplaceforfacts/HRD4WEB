@@ -2,13 +2,14 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { leagueHref, type LinkContext } from "@/lib/paths"
 
 type Result = {
   entryId: string
-  ownerName: string
+  teamName: string
 }
 
-export function EntrySearch() {
+export function EntrySearch({ seasonId, ctx }: { seasonId: string; ctx: LinkContext }) {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<Result[]>([])
   const [loading, setLoading] = useState(false)
@@ -22,7 +23,9 @@ export function EntrySearch() {
     }
 
     setLoading(true)
-    const res = await fetch(`/api/public/entries/search?q=${encodeURIComponent(value)}`)
+    const res = await fetch(
+      `/api/public/entries/search?seasonId=${encodeURIComponent(seasonId)}&q=${encodeURIComponent(value)}`,
+    )
     const data = await res.json()
     setResults(data)
     setLoading(false)
@@ -43,8 +46,8 @@ export function EntrySearch() {
             <div className="p-3 text-sm text-neutral-500">Searching...</div>
           ) : (
             results.map((r) => (
-              <Link key={r.entryId} href={`/team/${r.entryId}`} className="block px-4 py-2.5 text-sm hover:bg-neutral-50">
-                {r.ownerName}
+              <Link key={r.entryId} href={leagueHref(ctx, `/team/${r.entryId}`)} className="block px-4 py-2.5 text-sm hover:bg-neutral-50">
+                {r.teamName}
               </Link>
             ))
           )}

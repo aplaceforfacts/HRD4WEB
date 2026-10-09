@@ -5,9 +5,10 @@ export default function AdminSyncPage() {
     <div className="space-y-4">
       <h1 className="text-3xl font-bold tracking-tight">Sync</h1>
       <p className="max-w-2xl text-sm text-neutral-600">
-        This recalculates player period stats, entry standings, optimal lineups, and odds from the currently loaded snapshots.
+        Re-imports every player&apos;s MLB game log for the year, then recalculates player and team totals, ranks,
+        optimal lineups and odds for every league playing that year. This is what runs nightly at 5 AM ET.
       </p>
-      <AdminSyncForm />
+      <AdminSyncForm defaultYear={new Date().getFullYear()} />
     </div>
   )
 }

@@ -31,17 +31,55 @@ enum ScoringPeriodType {
   SEASON
 }
 
+enum ExportStatus {
+  PENDING
+  SENDING
+  COMPLETED
+  FAILED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  DRY_RUN
+  SKIPPED
+  FAILED
+}
+
+/// A league runs one Season per MLB year. Everything a league's members see hangs
+/// off its seasons; MLB data (players, game logs, projections) is shared across leagues.
+model League {
+  id                   String   @id @default(cuid())
+  /// URL segment: /{slug}/standings. Lowercase letters, digits and dashes.
+  slug                 String   @unique
+  name                 String
+  /// Clock the league's scoring periods roll over on.
+  timeZone             String   @default("America/New_York")
+  commissionerName     String?
+  commissionerEmail    String?
+  /// Email every team owner the standings workbook a couple of days after each month.
+  monthlyExportEnabled Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  seasons Season[]
+}
+
 model Season {
   id                 String       @id @default(cuid())
-  year               Int          @unique
+  leagueId           String
+  year               Int
   name               String
   entryDeadlineAt    DateTime
   regularSeasonStart DateTime
   regularSeasonEnd   DateTime
   entryStatus        SeasonStatus @default(SETUP)
+  /// Free text for the export's first sheet (prize amounts, notes), one line per row.
+  prizesText         String?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
+  league              League                           @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   groups              Group[]
   scoringPeriods      ScoringPeriod[]
   entries             Entry[]
@@ -53,7 +91,10 @@ model Season {
   winOdds             EntryWinOdds[]
   standingSnapshots   EntryStandingSnapshot[]
   projectionSnapshots EntryOpeningProjectionSnapshot[]
+  forecastSnapshots   PlayerForecastSnapshot[]
+  exportRuns          ExportRun[]
 
+  @@unique([leagueId, year])
   @@index([year])
 }
 
@@ -80,7 +121,8 @@ model Group {
 model Player {
   id               String   @id @default(cuid())
   providerPlayerId String?  @unique
-  fullName         String   @unique
+  /// Not unique: two MLB players can share a name (Max Muncy). providerPlayerId is the identity.
+  fullName         String
   mlbTeam          String?
   primaryPosition  String?
   isActive         Boolean  @default(true)
@@ -95,6 +137,7 @@ model Player {
   historicalStats HistoricalPlayerStat[]
   projections     PlayerProjection[]
   optimalPlayers  OptimalLineupPlayer[]
+  forecasts       PlayerForecastSnapshot[]
 
   @@index([fullName])
 }
@@ -118,16 +161,21 @@ model SeasonPlayerGroup {
   @@index([groupId, displayOrder])
 }
 
+/// A person. One owner can have several teams (entries) in a season, and every
+/// team needs an owner email so the monthly workbook can reach them.
 model Owner {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  phone     String?
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  phone       String?
+  notes       String?
+  /// The owner asked not to receive the monthly workbook.
+  emailOptOut Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  entries Entry[]
+  entries    Entry[]
+  deliveries ExportDelivery[]
 
   @@index([email])
 }
@@ -136,6 +184,8 @@ model Entry {
   id               String           @id @default(cuid())
   seasonId         String
   ownerId          String
+  /// What standings show ("Snoopy#2"). Unique within a season.
+  teamName         String
   submissionMethod SubmissionMethod
   submittedAt      DateTime?
   isLocked         Boolean          @default(false)
@@ -153,7 +203,8 @@ model Entry {
   standingSnapshots   EntryStandingSnapshot[]
   projectionSnapshots EntryOpeningProjectionSnapshot[]
 
-  @@unique([seasonId, ownerId])
+  @@unique([seasonId, teamName])
+  @@index([seasonId, ownerId])
   @@index([seasonId, submittedAt])
 }
 
@@ -192,6 +243,8 @@ model ScoringPeriod {
   winOdds             EntryWinOdds[]
   standingSnapshots   EntryStandingSnapshot[]
   projectionSnapshots EntryOpeningProjectionSnapshot[]
+  forecastSnapshots   PlayerForecastSnapshot[]
+  exportRuns          ExportRun[]
 
   @@unique([seasonId, label])
   @@index([seasonId, sortOrder])
@@ -257,23 +310,85 @@ model PlayerStatSnapshot {
 /// so a late-added player, a corrected MLB ID or a missed sync day is fixed by simply
 /// re-importing the log. Keyed by year, not season, so leagues share it.
 model PlayerGameLog {
-  id          String   @id @default(cuid())
-  playerId    String
-  seasonYear  Int
-  gamePk      Int
+  id         String   @id @default(cuid())
+  playerId   String
+  seasonYear Int
+  gamePk     Int
   /// MLB's official game date (the date the host's spreadsheet uses).
-  gameDate    DateTime @db.Date
-  teamId      Int?
-  homeRuns    Int      @default(0)
-  atBats      Int      @default(0)
-  totalBases  Int      @default(0)
-  importedAt  DateTime @default(now())
+  gameDate   DateTime @db.Date
+  teamId     Int?
+  homeRuns   Int      @default(0)
+  atBats     Int      @default(0)
+  totalBases Int      @default(0)
+  importedAt DateTime @default(now())
 
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, gamePk])
   @@index([seasonYear, gameDate])
   @@index([playerId, seasonYear])
+}
+
+/// What the forecast said for a player on a given day, kept so the season's
+/// predictions can be scored against actuals afterwards.
+model PlayerForecastSnapshot {
+  id                        String   @id @default(cuid())
+  seasonId                  String
+  playerId                  String
+  scoringPeriodId           String
+  snapshotDate              DateTime @db.Date
+  currentHomeRuns           Int
+  expectedRemainingHomeRuns Float
+  availability              String
+  modelVersion              String
+  createdAt                 DateTime @default(now())
+
+  season        Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  player        Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  scoringPeriod ScoringPeriod @relation(fields: [scoringPeriodId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, scoringPeriodId, snapshotDate])
+  @@index([scoringPeriodId, snapshotDate])
+}
+
+/// One monthly workbook send for one season and period. Deliveries make it resumable:
+/// a later run only sends to owners still PENDING or FAILED.
+model ExportRun {
+  id              String       @id @default(cuid())
+  seasonId        String
+  scoringPeriodId String
+  status          ExportStatus @default(PENDING)
+  dryRun          Boolean      @default(false)
+  fileName        String
+  error           String?
+  startedAt       DateTime     @default(now())
+  completedAt     DateTime?
+
+  season        Season           @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  scoringPeriod ScoringPeriod    @relation(fields: [scoringPeriodId], references: [id], onDelete: Cascade)
+  deliveries    ExportDelivery[]
+
+  @@unique([seasonId, scoringPeriodId, dryRun])
+}
+
+model ExportDelivery {
+  id                String         @id @default(cuid())
+  exportRunId       String
+  ownerId           String
+  email             String
+  status            DeliveryStatus @default(PENDING)
+  providerMessageId String?
+  error             String?
+  attempts          Int            @default(0)
+  sentAt            DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  exportRun ExportRun @relation(fields: [exportRunId], references: [id], onDelete: Cascade)
+  owner     Owner     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([exportRunId, ownerId])
+  @@index([exportRunId, status])
 }
 
 model PlayerPeriodStat {

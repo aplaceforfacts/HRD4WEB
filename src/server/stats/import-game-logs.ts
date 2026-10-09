@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/prisma"
-import { getPlayerGameLog } from "./mlb-stats-api"
+import { getPlayerGameLog, getTeamAbbreviations } from "./mlb-stats-api"
 
 const CONCURRENCY = 8
 
 type PlayerToImport = { id: string; providerPlayerId: string }
 
-async function importOne(player: PlayerToImport, seasonYear: number) {
+async function importOne(player: PlayerToImport, seasonYear: number, teamCodes: Map<number, string | null>) {
   const rows = await getPlayerGameLog(Number(player.providerPlayerId), seasonYear)
+  const latestTeamId = rows[rows.length - 1]?.teamId ?? null
+  const latestTeamCode = latestTeamId != null ? teamCodes.get(latestTeamId) ?? null : null
 
   // Replace the player's whole season so stat corrections and MLB ID fixes take
   // effect retroactively instead of piling up next to stale rows.
@@ -25,6 +27,10 @@ async function importOne(player: PlayerToImport, seasonYear: number) {
       })),
       skipDuplicates: true,
     }),
+    // The club of his most recent game, so traded players show their new team.
+    ...(latestTeamCode
+      ? [prisma.player.update({ where: { id: player.id }, data: { mlbTeam: latestTeamCode } })]
+      : []),
   ])
 
   return rows.length
@@ -51,6 +57,7 @@ export async function importGameLogs(seasonYear: number, seasonIds: string[]) {
     }
   }
 
+  const teamCodes = await getTeamAbbreviations(seasonYear)
   const queue = [...byId.values()]
   const failures: string[] = []
   let games = 0
@@ -58,7 +65,7 @@ export async function importGameLogs(seasonYear: number, seasonIds: string[]) {
   async function worker() {
     for (let next = queue.shift(); next; next = queue.shift()) {
       try {
-        const imported = await importOne(next, seasonYear)
+        const imported = await importOne(next, seasonYear, teamCodes)
         games += imported
       } catch (error) {
         failures.push(`${next.providerPlayerId}: ${error instanceof Error ? error.message : error}`)

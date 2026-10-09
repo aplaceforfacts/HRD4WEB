@@ -4,22 +4,8 @@ import { batchIngestPayloadSchema, runBatchIngest } from "@/server/admin/batch-i
 
 export const dynamic = "force-dynamic"
 
-function unauthorized() {
-  return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 })
-}
-
+// Auth is enforced by src/middleware.ts.
 export async function POST(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET
-  const authHeader = request.headers.get("authorization")
-
-  if (!cronSecret) {
-    return NextResponse.json({ ok: false, message: "CRON_SECRET is not configured." }, { status: 500 })
-  }
-
-  if (authHeader !== `Bearer ${cronSecret}`) {
-    return unauthorized()
-  }
-
   try {
     const raw = await request.json()
     const commit = Boolean(raw?.commit)

@@ -56,10 +56,10 @@ function rankRowsByScore(
   return ranked
 }
 
-export async function getGroupRankings(groupCode: string, periodLabel: string) {
+export async function getGroupRankings(seasonId: string, groupCode: string, periodLabel: string) {
   const group = await prisma.group.findFirst({
     where: {
-      season: { year: 2026 },
+      seasonId,
       code: groupCode.toUpperCase(),
     },
     include: {
@@ -72,7 +72,7 @@ export async function getGroupRankings(groupCode: string, periodLabel: string) {
                 where: {
                   scoringPeriod: {
                     label: periodLabel,
-                    season: { year: 2026 },
+                    seasonId,
                   },
                 },
               },

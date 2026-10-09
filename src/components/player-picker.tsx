@@ -31,6 +31,7 @@ type PlayerPickerProps = {
   options: PlayerOption[]
   onChange: (playerId: string) => void
   placeholder?: string
+  seasonYear: number
 }
 
 function formatPct(value: number | null | undefined) {
@@ -38,7 +39,7 @@ function formatPct(value: number | null | undefined) {
   return value.toFixed(3)
 }
 
-export function PlayerPicker({ value, options, onChange, placeholder = "Search players" }: PlayerPickerProps) {
+export function PlayerPicker({ value, options, onChange, placeholder = "Search players", seasonYear }: PlayerPickerProps) {
   const [query, setQuery] = useState("")
 
   const filtered = useMemo(() => {
@@ -64,8 +65,8 @@ export function PlayerPicker({ value, options, onChange, placeholder = "Search p
         <div className="grid divide-y divide-neutral-100">
           {filtered.map((player) => {
             const selected = value === player.id
-            const stats2025 = player.historicalStats.find((s) => s.seasonYear === 2025)
-            const stats2024 = player.historicalStats.find((s) => s.seasonYear === 2024)
+            const lastYear = player.historicalStats.find((s) => s.seasonYear === seasonYear - 1)
+            const twoYearsAgo = player.historicalStats.find((s) => s.seasonYear === seasonYear - 2)
             const firstProjection = player.projections[0]
 
             return (
@@ -91,15 +92,15 @@ export function PlayerPicker({ value, options, onChange, placeholder = "Search p
 
                 <div className="mt-3 grid gap-2 md:grid-cols-3">
                   <div className="rounded-xl bg-neutral-50 p-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">2025</div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{seasonYear - 1}</div>
                     <div className="mt-2 text-sm text-neutral-700">
-                      HR: {stats2025?.homeRuns ?? "—"} · AB: {stats2025?.atBats ?? "—"} · SLG: {formatPct(stats2025?.sluggingPct)}
+                      HR: {lastYear?.homeRuns ?? "—"} · AB: {lastYear?.atBats ?? "—"} · SLG: {formatPct(lastYear?.sluggingPct)}
                     </div>
                   </div>
                   <div className="rounded-xl bg-neutral-50 p-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">2024</div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{seasonYear - 2}</div>
                     <div className="mt-2 text-sm text-neutral-700">
-                      HR: {stats2024?.homeRuns ?? "—"} · AB: {stats2024?.atBats ?? "—"} · SLG: {formatPct(stats2024?.sluggingPct)}
+                      HR: {twoYearsAgo?.homeRuns ?? "—"} · AB: {twoYearsAgo?.atBats ?? "—"} · SLG: {formatPct(twoYearsAgo?.sluggingPct)}
                     </div>
                   </div>
                   <div className="rounded-xl bg-neutral-50 p-3">

@@ -2,23 +2,16 @@
 
 import { useState } from "react"
 
+type SeasonResult = { league: string; periodsProcessed: number; oddsPeriodsProcessed: number }
 type SyncResult = {
   ok?: boolean
   message?: string
-  importedSnapshots?: number
-  periodsProcessed?: number
-  oddsPeriodsProcessed?: number
-  openingProjectionSnapshots?: number
-  standingSnapshots?: number
-  maxMuncyLadId?: string
-  maxMuncyAsId?: string
-  season?: {
-    entryStatus?: string
-  }
+  gameLogs?: { players: number; games: number; missingIds: string[]; failures: string[] }
+  seasons?: SeasonResult[]
 }
 
-export function AdminSyncForm() {
-  const [secret, setSecret] = useState("")
+export function AdminSyncForm({ defaultYear }: { defaultYear: number }) {
+  const [year, setYear] = useState(String(defaultYear))
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<SyncResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -29,18 +22,9 @@ export function AdminSyncForm() {
     setResult(null)
 
     try {
-      const response = await fetch("/api/admin/sync/run", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${secret}`,
-        },
-      })
+      const response = await fetch(`/api/admin/sync/run?year=${encodeURIComponent(year)}`, { method: "POST" })
       const data = (await response.json()) as SyncResult
-
-      if (!response.ok) {
-        throw new Error(data.message ?? "Sync failed.")
-      }
-
+      if (!response.ok) throw new Error(data.message ?? "Sync failed.")
       setResult(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown sync error")
@@ -49,113 +33,45 @@ export function AdminSyncForm() {
     }
   }
 
-  async function repairMaxMuncy() {
-    setPending(true)
-    setError(null)
-    setResult(null)
-
-    try {
-      const response = await fetch("/api/admin/repair/max-muncy", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${secret}`,
-        },
-      })
-      const data = (await response.json()) as SyncResult
-
-      if (!response.ok) {
-        throw new Error(data.message ?? "Repair failed.")
-      }
-
-      setResult(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown repair error")
-    } finally {
-      setPending(false)
-    }
-  }
-
-  async function lockEntries() {
-    setPending(true)
-    setError(null)
-    setResult(null)
-
-    try {
-      const response = await fetch("/api/admin/season/lock-entries", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${secret}`,
-        },
-      })
-      const data = (await response.json()) as SyncResult
-
-      if (!response.ok) {
-        throw new Error(data.message ?? "Lock failed.")
-      }
-
-      setResult(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown lock error")
-    } finally {
-      setPending(false)
-    }
-  }
-
   return (
     <div className="max-w-xl space-y-4 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
       <label className="block space-y-2">
-        <span className="text-sm font-medium text-neutral-700">Admin secret</span>
+        <span className="text-sm font-medium text-neutral-700">MLB season</span>
         <input
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-neutral-900"
-          type="password"
-          value={secret}
-          onChange={(event) => setSecret(event.target.value)}
+          id="sync-year"
+          className="w-32 rounded-lg border border-neutral-300 px-3 py-2 text-sm"
+          inputMode="numeric"
+          value={year}
+          onChange={(event) => setYear(event.target.value)}
         />
       </label>
 
       <button
         className="rounded-lg border border-neutral-900 bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         type="button"
-        disabled={pending || !secret}
+        disabled={pending}
         onClick={runSync}
       >
-        {pending ? "Running sync..." : "Run scoring sync"}
-      </button>
-
-      <button
-        className="ml-2 rounded-lg border border-neutral-300 bg-white px-5 py-2.5 text-sm font-medium text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
-        type="button"
-        disabled={pending || !secret}
-        onClick={repairMaxMuncy}
-      >
-        Repair Max Muncy
-      </button>
-
-      <button
-        className="ml-2 rounded-lg border border-neutral-300 bg-white px-5 py-2.5 text-sm font-medium text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
-        type="button"
-        disabled={pending || !secret}
-        onClick={lockEntries}
-      >
-        Lock entries
+        {pending ? "Running sync…" : "Run sync"}
       </button>
 
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div> : null}
 
       {result ? (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          {result.maxMuncyAsId ? (
-            <>Repair complete. Run scoring sync next.</>
-          ) : result.season?.entryStatus ? (
-            <>Entries locked. Current status: {result.season.entryStatus}.</>
-          ) : (
-            <>
-              Sync complete. Imported snapshots: {result.importedSnapshots ?? 0}. Periods processed:{" "}
-              {result.periodsProcessed ?? 0}. Odds periods processed: {result.oddsPeriodsProcessed ?? 0}.
-              Opening projections: {result.openingProjectionSnapshots ?? 0}. Rank snapshots:{" "}
-              {result.standingSnapshots ?? 0}.
-            </>
-          )}
+        <div className="space-y-1 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          {result.message ? <div>{result.message}</div> : null}
+          {result.gameLogs ? (
+            <div>
+              Game logs: {result.gameLogs.games} games for {result.gameLogs.players} players.
+              {result.gameLogs.failures.length ? ` ${result.gameLogs.failures.length} players failed to load.` : ""}
+              {result.gameLogs.missingIds.length ? ` No MLB ID yet: ${result.gameLogs.missingIds.join(", ")}.` : ""}
+            </div>
+          ) : null}
+          {result.seasons?.map((season) => (
+            <div key={season.league}>
+              {season.league}: {season.periodsProcessed} periods scored, odds for {season.oddsPeriodsProcessed}.
+            </div>
+          ))}
         </div>
       ) : null}
     </div>

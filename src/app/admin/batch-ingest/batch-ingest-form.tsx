@@ -26,14 +26,13 @@ type BatchResult = {
   skipSourceRows?: number[]
 }
 
-async function callBatchIngest(payloadText: string, secret: string, commit: boolean) {
+async function callBatchIngest(payloadText: string, commit: boolean) {
   const payload = JSON.parse(payloadText)
 
   const response = await fetch("/api/admin/batch-ingest", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${secret}`,
     },
     body: JSON.stringify({ payload, commit }),
   })
@@ -48,7 +47,6 @@ async function callBatchIngest(payloadText: string, secret: string, commit: bool
 
 export function BatchIngestForm() {
   const [payloadText, setPayloadText] = useState("")
-  const [secret, setSecret] = useState("")
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<BatchResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -63,7 +61,7 @@ export function BatchIngestForm() {
     setError(null)
 
     try {
-      const nextResult = await callBatchIngest(payloadText, secret, commit)
+      const nextResult = await callBatchIngest(payloadText, commit)
       setResult(nextResult)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error")
@@ -101,21 +99,11 @@ export function BatchIngestForm() {
             />
           </label>
 
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-neutral-700">Admin secret</span>
-            <input
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-neutral-900"
-              type="password"
-              value={secret}
-              onChange={(event) => setSecret(event.target.value)}
-            />
-          </label>
-
           <div className="grid gap-2">
             <button
               className="rounded-lg border border-neutral-900 bg-white px-4 py-2 text-sm font-medium text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
-              disabled={pending || !payloadText || !secret}
+              disabled={pending || !payloadText}
               onClick={() => run(false)}
             >
               Validate / Dry Run
@@ -123,7 +111,7 @@ export function BatchIngestForm() {
             <button
               className="rounded-lg border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
-              disabled={pending || !payloadText || !secret || !canCommit}
+              disabled={pending || !payloadText || !canCommit}
               onClick={() => run(true)}
             >
               Commit Import

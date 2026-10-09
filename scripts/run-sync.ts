@@ -8,7 +8,7 @@ async function main() {
 
   const started = Date.now()
   const result = await runDailySync(year)
-  console.log(JSON.stringify({ ...result, oddsSummaries: undefined, lifecycleSnapshotSummaries: undefined }, null, 2))
+  console.log(JSON.stringify(result, null, 2))
   console.log(`Finished in ${Math.round((Date.now() - started) / 1000)}s`)
 }
 

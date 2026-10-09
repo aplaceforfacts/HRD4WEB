@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { isPeriodActive } from "@/lib/periods"
 import { ScoringPeriodType } from "@prisma/client"
-import { estimateRemainingHomeRuns } from "@/server/forecast/remaining-home-runs"
+import { estimateRemainingHomeRuns, FORECAST_MODEL_VERSION } from "@/server/forecast/remaining-home-runs"
+import { getSeasonToDateLines } from "@/server/stats/season-to-date"
 
 const TOTAL_SIMULATIONS = 1500
 const POISSON_SCALE = 0.8
@@ -17,21 +18,22 @@ type SimulatedEntry = {
   players: ForecastPlayer[]
 }
 
-export async function computeEntryWinOdds(seasonYear = 2026) {
-  const season = await prisma.season.findUnique({
-    where: { year: seasonYear },
-    include: {
-      scoringPeriods: {
-        orderBy: { sortOrder: "asc" },
-      },
-    },
-  })
+type SeasonForOdds = {
+  id: string
+  year: number
+  scoringPeriods: Array<{
+    id: string
+    label: string
+    startDate: Date
+    endDate: Date
+    periodType: ScoringPeriodType
+    sortOrder: number
+  }>
+}
 
-  if (!season) {
-    throw new Error(`Season ${seasonYear} not found.`)
-  }
+export async function computeEntryWinOdds(season: SeasonForOdds, asOfDate = new Date()) {
+  const targetPeriods = getTargetScoringPeriods(season.scoringPeriods, asOfDate)
 
-  const targetPeriods = getTargetScoringPeriods(season.scoringPeriods)
   const summaries: Array<{
     scoringPeriodId: string
     label: string
@@ -41,9 +43,9 @@ export async function computeEntryWinOdds(seasonYear = 2026) {
 
   for (const period of targetPeriods) {
     const simulationInput = await loadSimulationInput({
-      seasonId: season.id,
-      seasonYear,
-      scoringPeriodId: period.id,
+      season,
+      scoringPeriod: period,
+      asOfDate,
     })
 
     if (simulationInput.entries.length === 0) {
@@ -87,6 +89,8 @@ export async function computeEntryWinOdds(seasonYear = 2026) {
       ),
     )
 
+    await saveForecastSnapshots(season.id, period.id, simulationInput)
+
     summaries.push({
       scoringPeriodId: period.id,
       label: period.label,
@@ -97,24 +101,13 @@ export async function computeEntryWinOdds(seasonYear = 2026) {
 
   return {
     ok: true,
-    seasonYear,
+    seasonYear: season.year,
     periodsProcessed: summaries.length,
     summaries,
   }
 }
 
-function getTargetScoringPeriods(
-  scoringPeriods: Array<{
-    id: string
-    label: string
-    startDate: Date
-    endDate: Date
-    periodType: ScoringPeriodType
-    sortOrder: number
-  }>,
-) {
-  const now = new Date()
-
+function getTargetScoringPeriods(scoringPeriods: SeasonForOdds["scoringPeriods"], now: Date) {
   const seasonPeriod = scoringPeriods.find(
     (period) =>
       period.periodType === ScoringPeriodType.SEASON &&
@@ -128,83 +121,68 @@ function getTargetScoringPeriods(
         isPeriodActive(period, now),
     )
 
-  return [seasonPeriod, currentMonthly].filter(Boolean) as Array<{
-    id: string
-    label: string
-    startDate: Date
-    endDate: Date
-    periodType: ScoringPeriodType
-    sortOrder: number
-  }>
+  return [seasonPeriod, currentMonthly].filter(Boolean) as SeasonForOdds["scoringPeriods"]
+}
+
+type PlayerForecast = {
+  playerId: string
+  currentHomeRuns: number
+  expectedRemainingHomeRuns: number
+  availability: string
 }
 
 async function loadSimulationInput({
-  seasonId,
-  seasonYear,
-  scoringPeriodId,
+  season,
+  scoringPeriod,
+  asOfDate,
 }: {
-  seasonId: string
-  seasonYear: number
-  scoringPeriodId: string
+  season: SeasonForOdds
+  scoringPeriod: SeasonForOdds["scoringPeriods"][number]
+  asOfDate: Date
 }) {
-  const scoringPeriod = await prisma.scoringPeriod.findUnique({
-    where: { id: scoringPeriodId },
-  })
-
-  if (!scoringPeriod) {
-    throw new Error(`Scoring period ${scoringPeriodId} not found.`)
-  }
-
-  const [entries, latestSnapshots, projections] = await Promise.all([
+  const [entries, projections, periodStats] = await Promise.all([
     prisma.entry.findMany({
-      where: { seasonId },
+      where: { seasonId: season.id },
       include: {
-        owner: true,
         players: {
           include: {
             player: {
               include: {
                 historicalStats: {
-                  where: { seasonYear: seasonYear - 1 },
+                  where: { seasonYear: season.year - 1 },
                   take: 1,
                 },
               },
             },
-            group: true,
           },
-          orderBy: [{ group: { sortOrder: "asc" } }, { slotNumber: "asc" }],
         },
         periodScores: {
-          where: { scoringPeriodId },
+          where: { scoringPeriodId: scoringPeriod.id },
           take: 1,
         },
       },
-      orderBy: {
-        owner: { name: "asc" },
-      },
-    }),
-    prisma.playerStatSnapshot.findMany({
-      where: { seasonId },
-      orderBy: [{ playerId: "asc" }, { snapshotDate: "desc" }],
-      distinct: ["playerId"],
     }),
     prisma.playerProjection.findMany({
       where: {
-        seasonYear,
+        seasonYear: season.year,
         source: "steamer",
       },
     }),
+    prisma.playerPeriodStat.findMany({
+      where: { scoringPeriodId: scoringPeriod.id },
+      select: { playerId: true, homeRuns: true },
+    }),
   ])
 
-  const snapshotByPlayerId = new Map(
-    latestSnapshots.map((snapshot) => [snapshot.playerId, snapshot]),
-  )
+  const rosteredIds = [...new Set(entries.flatMap((entry) => entry.players.map((row) => row.playerId)))]
+  const seasonLines = await getSeasonToDateLines(season.year, rosteredIds)
   const projectionByPlayerId = new Map(
     projections.map((projection) => [projection.playerId, projection]),
   )
+  const periodHomeRuns = new Map(periodStats.map((row) => [row.playerId, row.homeRuns]))
   const simulatedAt = new Date()
 
-  const playerForecastCache = new Map<string, number>()
+  const forecasts = new Map<string, PlayerForecast>()
   const entriesForSimulation: SimulatedEntry[] = []
 
   for (const entry of entries) {
@@ -212,35 +190,38 @@ async function loadSimulationInput({
     const players: ForecastPlayer[] = []
 
     for (const entryPlayer of entry.players) {
-      const cacheKey = `${entryPlayer.playerId}:${scoringPeriod.id}`
-
-      if (!playerForecastCache.has(cacheKey)) {
-        const snapshot = snapshotByPlayerId.get(entryPlayer.playerId)
+      if (!forecasts.has(entryPlayer.playerId)) {
+        const line = seasonLines.get(entryPlayer.playerId)
         const projection = projectionByPlayerId.get(entryPlayer.playerId)
         const historical = entryPlayer.player.historicalStats[0] ?? null
 
-        const expectedRemainingHomeRuns = await estimateRemainingHomeRuns({
+        const forecast = await estimateRemainingHomeRuns({
           providerPlayerId: entryPlayer.player.providerPlayerId,
           projectionHomeRuns: projection?.projectedHomeRuns ?? null,
           projectionAtBats: projection?.projectedAtBats ?? null,
-          snapshotHomeRuns: snapshot?.homeRuns ?? 0,
-          snapshotAtBats: snapshot?.atBats ?? 0,
-          snapshotGamesPlayed: snapshot?.gamesPlayed ?? 0,
+          snapshotHomeRuns: line?.homeRuns ?? 0,
+          snapshotAtBats: line?.atBats ?? 0,
+          snapshotGamesPlayed: line?.gamesPlayed ?? 0,
           historicalAtBats: historical?.atBats ?? null,
           historicalGamesPlayed: historical?.gamesPlayed ?? null,
-          seasonYear,
+          seasonYear: season.year,
           scoringPeriodType: scoringPeriod.periodType,
           scoringPeriodStart: scoringPeriod.startDate,
           scoringPeriodEnd: scoringPeriod.endDate,
-          asOfDate: simulatedAt,
+          asOfDate,
         })
 
-        playerForecastCache.set(cacheKey, expectedRemainingHomeRuns)
+        forecasts.set(entryPlayer.playerId, {
+          playerId: entryPlayer.playerId,
+          currentHomeRuns: periodHomeRuns.get(entryPlayer.playerId) ?? 0,
+          expectedRemainingHomeRuns: forecast.expectedRemainingHomeRuns,
+          availability: forecast.availability,
+        })
       }
 
       players.push({
         playerId: entryPlayer.playerId,
-        expectedRemainingHomeRuns: playerForecastCache.get(cacheKey) ?? 0,
+        expectedRemainingHomeRuns: forecasts.get(entryPlayer.playerId)?.expectedRemainingHomeRuns ?? 0,
       })
     }
 
@@ -254,7 +235,34 @@ async function loadSimulationInput({
   return {
     simulatedAt,
     entries: entriesForSimulation,
+    forecasts: [...forecasts.values()],
   }
+}
+
+/** Keeps one row per player per period per day; a re-run the same day overwrites it. */
+async function saveForecastSnapshots(
+  seasonId: string,
+  scoringPeriodId: string,
+  input: Awaited<ReturnType<typeof loadSimulationInput>>,
+) {
+  const day = input.simulatedAt.toISOString().slice(0, 10)
+  const snapshotDate = new Date(`${day}T00:00:00.000Z`)
+
+  await prisma.$transaction([
+    prisma.playerForecastSnapshot.deleteMany({ where: { scoringPeriodId, snapshotDate } }),
+    prisma.playerForecastSnapshot.createMany({
+      data: input.forecasts.map((row) => ({
+        seasonId,
+        playerId: row.playerId,
+        scoringPeriodId,
+        snapshotDate,
+        currentHomeRuns: row.currentHomeRuns,
+        expectedRemainingHomeRuns: row.expectedRemainingHomeRuns,
+        availability: row.availability,
+        modelVersion: FORECAST_MODEL_VERSION,
+      })),
+    }),
+  ])
 }
 
 function runSimulations(entries: SimulatedEntry[], simulations: number) {

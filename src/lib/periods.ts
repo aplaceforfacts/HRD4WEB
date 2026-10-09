@@ -1,12 +1,20 @@
-export const PERIODS = [
-  { label: "Season", slug: "season" },
-  { label: "Mar/Apr", slug: "mar-apr" },
-  { label: "May", slug: "may" },
-  { label: "June", slug: "june" },
-  { label: "July", slug: "july" },
-  { label: "August", slug: "august" },
-  { label: "September", slug: "september" },
-]
+/** URL form of a period label: "Mar/Apr" -> "mar-apr", "Season" -> "season". */
+export function periodSlug(label: string) {
+  return label.toLowerCase().replace(/[\/\s]+/g, "-")
+}
+
+/** The season's period for a ?period= slug, falling back to the whole-season period. */
+export function findPeriodBySlug<T extends { label: string; periodType: string }>(
+  periods: T[],
+  slug: string | undefined | null,
+) {
+  const wanted = slug ? decodeURIComponent(slug).toLowerCase() : "season"
+  return (
+    periods.find((period) => periodSlug(period.label) === wanted || period.label.toLowerCase() === wanted) ??
+    periods.find((period) => period.periodType === "SEASON") ??
+    periods[0]
+  )
+}
 
 export type MonthStatus =
   | "upcoming"

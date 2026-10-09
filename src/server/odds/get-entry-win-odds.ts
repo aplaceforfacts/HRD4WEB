@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import { assignRanksDescending } from "@/server/scoring/assign-ranks"
 
-export async function getOddsBoard(periodLabel: string, seasonYear = 2026) {
+export async function getOddsBoard(seasonId: string, periodLabel: string) {
   const scoringPeriod = await prisma.scoringPeriod.findFirst({
     where: {
-      season: { year: seasonYear },
+      seasonId,
       label: periodLabel,
     },
   })
@@ -18,7 +18,6 @@ export async function getOddsBoard(periodLabel: string, seasonYear = 2026) {
     include: {
       entry: {
         include: {
-          owner: true,
           players: {
             include: {
               player: true,
@@ -39,7 +38,7 @@ export async function getOddsBoard(periodLabel: string, seasonYear = 2026) {
   const ranked = assignRanksDescending(
     odds.map((row) => ({
       id: row.entry.id,
-      ownerName: row.entry.owner.name,
+      teamName: row.entry.teamName,
       score: row.winProbability,
       currentHomeRuns: row.entry.periodScores[0]?.homeRuns ?? 0,
       expectedFinalHr: row.expectedFinalHr ?? 0,

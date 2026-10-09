@@ -50,28 +50,15 @@ export async function computeOptimalLineup(seasonId: string, scoringPeriodId: st
       orderBy: [{ homeRuns: "desc" }, { playerId: "asc" }],
     })
 
-    if (group.code === "M") {
-      rankedPlayers.slice(0, 4).forEach((row, index) => {
-        chosen.push({
-          groupId: group.id,
-          playerId: row.playerId,
-          slotNumber: index + 1,
-          homeRuns: row.homeRuns,
-          rankInGroup: row.rankInGroup,
-        })
+    rankedPlayers.slice(0, group.selectionCount).forEach((row, index) => {
+      chosen.push({
+        groupId: group.id,
+        playerId: row.playerId,
+        slotNumber: index + 1,
+        homeRuns: row.homeRuns,
+        rankInGroup: row.rankInGroup,
       })
-    } else {
-      const best = rankedPlayers[0]
-      if (best) {
-        chosen.push({
-          groupId: group.id,
-          playerId: best.playerId,
-          slotNumber: 1,
-          homeRuns: best.homeRuns,
-          rankInGroup: best.rankInGroup,
-        })
-      }
-    }
+    })
   }
 
   const dedupedChosen = dedupeOptimalSelections(scoringPeriodId, chosen)

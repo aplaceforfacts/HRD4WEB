@@ -89,6 +89,14 @@ export type RemainingHomeRunsInput = {
   asOfDate: Date
 }
 
+/** Bump when the forecast math changes, so stored forecasts can be compared by model. */
+export const FORECAST_MODEL_VERSION = "2026-08-20"
+
+export type RemainingHomeRunsForecast = {
+  expectedRemainingHomeRuns: number
+  availability: RosterAvailability | "NO_MLB_ID" | "NO_TEAM"
+}
+
 /**
  * Expected home runs a player adds between now and the end of the scoring window.
  *
@@ -109,17 +117,24 @@ export async function estimateRemainingHomeRuns({
   scoringPeriodStart,
   scoringPeriodEnd,
   asOfDate,
-}: RemainingHomeRunsInput): Promise<number> {
-  if (!providerPlayerId) return 0
+}: RemainingHomeRunsInput): Promise<RemainingHomeRunsForecast> {
+  if (!providerPlayerId) return { expectedRemainingHomeRuns: 0, availability: "NO_MLB_ID" }
 
   const live = await getPlayerSeasonSnapshot(Number(providerPlayerId), seasonYear)
 
   // Availability supersedes everything else: a player on the 60-day IL, in the
   // minors, or suspended adds nothing no matter how well he was hitting.
-  if (UNAVAILABLE.includes(live.availability)) return 0
+  if (UNAVAILABLE.includes(live.availability)) {
+    return { expectedRemainingHomeRuns: 0, availability: live.availability }
+  }
 
   // No MLB club means no remaining schedule to project against.
-  if (!live.teamId) return 0
+  if (!live.teamId) return { expectedRemainingHomeRuns: 0, availability: "NO_TEAM" }
+
+  const forecast = (expectedRemainingHomeRuns: number) => ({
+    expectedRemainingHomeRuns,
+    availability: live.availability,
+  })
 
   const snapshotCutoff = getScoringDayCutoff(asOfDate)
   const windowStart =
@@ -135,7 +150,7 @@ export async function estimateRemainingHomeRuns({
     scoringPeriodEnd,
   )
 
-  if (teamGames.remaining <= 0) return 0
+  if (teamGames.remaining <= 0) return forecast(0)
 
   const weight = getPreseasonProjectionWeight(asOfDate)
 
@@ -174,5 +189,5 @@ export async function estimateRemainingHomeRuns({
 
   const hrPerGame = blend(projectedHrPerGame, actualHrPerGame, weight) ?? 0
 
-  return Math.max(0, hrPerGame * remainingGames)
+  return forecast(Math.max(0, hrPerGame * remainingGames))
 }

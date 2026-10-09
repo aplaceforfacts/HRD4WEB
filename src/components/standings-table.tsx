@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { leagueHref, type LinkContext } from "@/lib/paths"
 
 type RowPlayer = {
   id: string
@@ -17,7 +18,7 @@ type StandingRow = {
   id: string
   rank: number
   isTied?: boolean
-  ownerName: string
+  teamName: string
   entryId: string
   homeRuns: number
   rankMovement?: number | null
@@ -52,7 +53,7 @@ function formatGroupRank(rank: number | null, isTied: boolean) {
   return `${isTied ? "T-" : ""}${formatOrdinal(rank)}`
 }
 
-export function StandingsTable({ rows }: { rows: StandingRow[] }) {
+export function StandingsTable({ rows, ctx, periodSlug }: { rows: StandingRow[]; ctx: LinkContext; periodSlug: string }) {
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
   const showMovement = rows.some((row) => row.rankMovement !== undefined)
 
@@ -80,7 +81,7 @@ export function StandingsTable({ rows }: { rows: StandingRow[] }) {
             {showMovement ? (
               <th className="px-5 py-3 font-medium">Move</th>
             ) : null}
-            <th className="px-5 py-3 font-medium">Owner</th>
+            <th className="px-5 py-3 font-medium">Team</th>
             <th className="px-5 py-3 font-medium text-right">HR</th>
             <th className="px-5 py-3 font-medium text-right">Roster</th>
           </tr>
@@ -97,6 +98,7 @@ export function StandingsTable({ rows }: { rows: StandingRow[] }) {
                 isExpanded={isExpanded}
                 showMovement={showMovement}
                 onToggle={() => toggleRow(row.id)}
+                teamHref={leagueHref(ctx, `/team/${row.entryId}`, { period: periodSlug })}
               />
             )
           })}
@@ -111,11 +113,13 @@ function FragmentRow({
   isExpanded,
   showMovement,
   onToggle,
+  teamHref,
 }: {
   row: StandingRow
   isExpanded: boolean
   showMovement: boolean
   onToggle: () => void
+  teamHref: string
 }) {
   const movement = formatMovement(row.rankMovement)
 
@@ -134,10 +138,10 @@ function FragmentRow({
 
         <td className="px-5 py-4">
           <Link
-            href={`/team/${row.entryId}`}
+            href={teamHref}
             className="font-medium text-neutral-900 hover:underline"
           >
-            {row.ownerName}
+            {row.teamName}
           </Link>
         </td>
 

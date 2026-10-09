@@ -1,46 +1,47 @@
-import { prisma } from "@/lib/prisma"
 import { calculateEntryPeriodScores } from "@/server/scoring/calculate-entry-period-scores"
 import { calculatePlayerPeriodStats } from "@/server/scoring/calculate-player-period-stats"
 import { computeOptimalLineup } from "@/server/scoring/compute-optimal-lineup"
 import { computeEntryWinOdds } from "@/server/odds/compute-entry-win-odds"
+import { getSeasonsForYear } from "@/server/season/resolve-season"
 import { writeLifecycleSnapshots } from "@/server/standings/lifecycle-snapshots"
+import { ensureProviderIds } from "./ensure-provider-ids"
 import { importGameLogs } from "./import-game-logs"
-import { importMlbSnapshotsForToday } from "./import-mlb-snapshots"
 
-export async function runDailySync(seasonYear = 2026) {
-  const season = await prisma.season.findUnique({
-    where: { year: seasonYear },
-    include: { scoringPeriods: true },
-  })
+/**
+ * Nightly pipeline for one MLB year, across every league playing it: refresh game
+ * logs once (they're shared), then score, rank and forecast each league's season.
+ */
+export async function runDailySync(seasonYear: number) {
+  const seasons = await getSeasonsForYear(seasonYear)
 
-  if (!season) {
-    throw new Error(`Season ${seasonYear} not found.`)
+  if (seasons.length === 0) {
+    return { ok: true, seasonYear, seasons: [], message: `No league has a ${seasonYear} season.` }
   }
 
-  const snapshotResult = await importMlbSnapshotsForToday(seasonYear)
-  const gameLogResult = await importGameLogs(seasonYear, [season.id])
+  await ensureProviderIds()
+  const gameLogs = await importGameLogs(seasonYear, seasons.map((season) => season.id))
 
-  for (const period of season.scoringPeriods) {
-    await calculatePlayerPeriodStats(season.id, period.id)
-    await calculateEntryPeriodScores(season.id, period.id)
-    await computeOptimalLineup(season.id, period.id)
+  const results = []
+
+  for (const season of seasons) {
+    for (const period of season.scoringPeriods) {
+      await calculatePlayerPeriodStats(season.id, period.id)
+      await calculateEntryPeriodScores(season.id, period.id)
+      await computeOptimalLineup(season.id, period.id)
+    }
+
+    const odds = await computeEntryWinOdds(season)
+    const lifecycle = await writeLifecycleSnapshots({ season })
+
+    results.push({
+      league: season.league.slug,
+      seasonId: season.id,
+      periodsProcessed: season.scoringPeriods.length,
+      oddsPeriodsProcessed: odds.periodsProcessed,
+      openingProjectionSnapshots: lifecycle.openingProjectionSnapshots,
+      standingSnapshots: lifecycle.standingSnapshots,
+    })
   }
 
-  const oddsResult = await computeEntryWinOdds(seasonYear)
-  const lifecycleSnapshotResult = await writeLifecycleSnapshots({ season })
-
-  return {
-    ok: true,
-    seasonYear,
-    importedSnapshots: snapshotResult.imported,
-    gameLogs: gameLogResult,
-    periodsProcessed: season.scoringPeriods.length,
-    oddsPeriodsProcessed: oddsResult.periodsProcessed,
-    oddsSummaries: oddsResult.summaries,
-    lifecycleSnapshotPeriodsProcessed: lifecycleSnapshotResult.periodsProcessed,
-    openingProjectionSnapshots:
-      lifecycleSnapshotResult.openingProjectionSnapshots,
-    standingSnapshots: lifecycleSnapshotResult.standingSnapshots,
-    lifecycleSnapshotSummaries: lifecycleSnapshotResult.summaries,
-  }
+  return { ok: true, seasonYear, gameLogs, seasons: results }
 }

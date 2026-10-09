@@ -3,35 +3,7 @@ import { prisma } from "@/lib/prisma"
 export async function getEntryDetail(entryId: string, periodLabel = "Season") {
   const entry = await prisma.entry.findUnique({
     where: { id: entryId },
-    include: {
-      owner: true,
-      season: true,
-      players: {
-        include: {
-          player: {
-            include: {
-              periodStats: {
-                where: {
-                  scoringPeriod: {
-                    label: periodLabel,
-                    season: { year: 2026 },
-                  },
-                },
-              },
-            },
-          },
-          group: true,
-        },
-        orderBy: [{ group: { sortOrder: "asc" } }, { slotNumber: "asc" }],
-      },
-      periodScores: {
-        where: {
-          scoringPeriod: {
-            label: periodLabel,
-          },
-        },
-      },
-    },
+    include: { season: { include: { league: true } } },
   })
 
   if (!entry) return null
@@ -45,40 +17,46 @@ export async function getEntryDetail(entryId: string, periodLabel = "Season") {
 
   if (!scoringPeriod) return null
 
-  const allScores = await prisma.entryPeriodScore.findMany({
-    where: {
-      seasonId: entry.seasonId,
-      scoringPeriodId: scoringPeriod.id,
-    },
-    orderBy: [{ homeRuns: "desc" }, { entry: { owner: { name: "asc" } } }],
-    include: {
-      entry: {
-        include: {
-          owner: true,
+  const [players, allScores, optimal] = await Promise.all([
+    prisma.entryPlayer.findMany({
+      where: { entryId },
+      include: {
+        group: true,
+        player: {
+          include: {
+            periodStats: { where: { scoringPeriodId: scoringPeriod.id } },
+          },
         },
       },
-    },
-  })
+      orderBy: [{ group: { sortOrder: "asc" } }, { slotNumber: "asc" }],
+    }),
+    prisma.entryPeriodScore.findMany({
+      where: {
+        seasonId: entry.seasonId,
+        scoringPeriodId: scoringPeriod.id,
+      },
+      orderBy: [{ homeRuns: "desc" }, { entry: { teamName: "asc" } }],
+    }),
+    prisma.optimalLineup.findFirst({
+      where: {
+        seasonId: entry.seasonId,
+        scoringPeriodId: scoringPeriod.id,
+      },
+      include: {
+        players: {
+          include: {
+            group: true,
+            player: true,
+          },
+        },
+      },
+    }),
+  ])
 
   const leader = allScores[0] ?? null
-  const myScore = entry.periodScores[0] ?? null
+  const myScore = allScores.find((score) => score.entryId === entry.id) ?? null
 
-  const optimal = await prisma.optimalLineup.findFirst({
-    where: {
-      seasonId: entry.seasonId,
-      scoringPeriodId: scoringPeriod.id,
-    },
-    include: {
-      players: {
-        include: {
-          group: true,
-          player: true,
-        },
-      },
-    },
-  })
-
-  const rosterRows = entry.players.map((row) => {
+  const rosterRows = players.map((row) => {
     const stat = row.player.periodStats[0]
     return {
       entryPlayerId: row.id,
@@ -97,8 +75,10 @@ export async function getEntryDetail(entryId: string, periodLabel = "Season") {
   return {
     entry: {
       id: entry.id,
-      ownerName: entry.owner.name,
+      teamName: entry.teamName,
       seasonName: entry.season.name,
+      seasonYear: entry.season.year,
+      leagueSlug: entry.season.league.slug,
     },
     period: scoringPeriod,
     rosterRows,

@@ -8,7 +8,8 @@ const playerToAddSchema = z.object({
   fullName: z.string().min(1),
   mlbTeam: z.string().min(1),
   sourceName: z.string().min(1),
-  marAprHomeRuns: z.number().int().min(0),
+  /** Ignored: past home runs now come from MLB game logs. Kept so old payloads still parse. */
+  marAprHomeRuns: z.number().int().min(0).optional(),
   pickCount: z.number().int().min(0),
   sourceRow: z.number().int(),
 })
@@ -20,6 +21,7 @@ const entrySchema = z.object({
 })
 
 export const batchIngestPayloadSchema = z.object({
+  leagueSlug: z.string().min(1).default("hrd"),
   seasonYear: z.number().int(),
   skipSourceRows: z.array(z.number().int()).default([]),
   playersToAdd: z.array(playerToAddSchema).default([]),
@@ -165,9 +167,9 @@ function expectedGroupCodes(selectionCounts: Map<string, number>) {
   )
 }
 
-async function loadSeasonContext(seasonYear: number) {
-  const season = await prisma.season.findUnique({
-    where: { year: seasonYear },
+async function loadSeasonContext(leagueSlug: string, seasonYear: number) {
+  const season = await prisma.season.findFirst({
+    where: { year: seasonYear, league: { slug: leagueSlug } },
     include: {
       groups: {
         include: {
@@ -181,7 +183,7 @@ async function loadSeasonContext(seasonYear: number) {
     },
   })
 
-  if (!season) throw new Error(`Season ${seasonYear} not found.`)
+  if (!season) throw new Error(`League ${leagueSlug} has no ${seasonYear} season.`)
 
   const selectionCounts = new Map(season.groups.map((group) => [group.code, group.selectionCount]))
   const players = season.groups.flatMap((group) =>
@@ -197,9 +199,8 @@ async function loadSeasonContext(seasonYear: number) {
 }
 
 async function ensurePlayersToAdd(payload: BatchIngestPayload, commit: boolean) {
-  const { season } = await loadSeasonContext(payload.seasonYear)
+  const { season } = await loadSeasonContext(payload.leagueSlug, payload.seasonYear)
   const groups = new Map(season.groups.map((group) => [group.code, group]))
-  const marAprPeriod = season.scoringPeriods.find((period) => period.label === "Mar/Apr")
 
   const added: string[] = []
   const skipped: string[] = []
@@ -222,18 +223,16 @@ async function ensurePlayersToAdd(payload: BatchIngestPayload, commit: boolean) 
     if (!commit) continue
 
     await prisma.$transaction(async (tx) => {
-      const player = await tx.player.upsert({
-        where: { fullName: getStoredPlayerName(playerInput.sourceName, playerInput.fullName) },
-        update: {
-          mlbTeam: playerInput.mlbTeam,
-          isActive: true,
-        },
-        create: {
-          fullName: getStoredPlayerName(playerInput.sourceName, playerInput.fullName),
-          mlbTeam: playerInput.mlbTeam,
-          isActive: true,
-        },
-      })
+      const storedName = getStoredPlayerName(playerInput.sourceName, playerInput.fullName)
+      const existingPlayer = await tx.player.findFirst({ where: { fullName: storedName } })
+      const player = existingPlayer
+        ? await tx.player.update({
+            where: { id: existingPlayer.id },
+            data: { mlbTeam: playerInput.mlbTeam, isActive: true },
+          })
+        : await tx.player.create({
+            data: { fullName: storedName, mlbTeam: playerInput.mlbTeam, isActive: true },
+          })
 
       await tx.seasonPlayerGroup.upsert({
         where: {
@@ -255,33 +254,6 @@ async function ensurePlayersToAdd(payload: BatchIngestPayload, commit: boolean) 
           notes: `Batch ingest source row ${playerInput.sourceRow}; picked ${playerInput.pickCount}x.`,
         },
       })
-
-      if (marAprPeriod) {
-        const marAprSnapshotDate = new Date(marAprPeriod.endDate.getTime() - 1)
-
-        await tx.playerStatSnapshot.upsert({
-          where: {
-            seasonId_playerId_snapshotDate: {
-              seasonId: season.id,
-              playerId: player.id,
-              snapshotDate: marAprSnapshotDate,
-            },
-          },
-          update: {
-            teamCode: playerInput.mlbTeam,
-            homeRuns: playerInput.marAprHomeRuns,
-            sourceName: "batch-ingest",
-          },
-          create: {
-            seasonId: season.id,
-            playerId: player.id,
-            snapshotDate: marAprSnapshotDate,
-            teamCode: playerInput.mlbTeam,
-            homeRuns: playerInput.marAprHomeRuns,
-            sourceName: "batch-ingest",
-          },
-        })
-      }
     })
   }
 
@@ -289,7 +261,7 @@ async function ensurePlayersToAdd(payload: BatchIngestPayload, commit: boolean) 
 }
 
 async function resolveEntries(payload: BatchIngestPayload, includeVirtualPlayers: boolean) {
-  const { season, selectionCounts, players } = await loadSeasonContext(payload.seasonYear)
+  const { season, selectionCounts, players } = await loadSeasonContext(payload.leagueSlug, payload.seasonYear)
   const playerOptions = [...players]
 
   if (includeVirtualPlayers) {
@@ -371,11 +343,11 @@ async function resolveEntries(payload: BatchIngestPayload, includeVirtualPlayers
   return { season, resolvedEntries, invalidEntries, unresolvedPlayers }
 }
 
-async function findExistingEntry(seasonId: string, ownerEmail: string, ownerName: string, rawSelections: string[]) {
+async function findExistingEntry(seasonId: string, ownerEmail: string, teamName: string, rawSelections: string[]) {
   const direct = await prisma.entry.findFirst({
     where: {
       seasonId,
-      owner: { email: ownerEmail },
+      OR: [{ teamName }, { owner: { email: ownerEmail } }],
     },
     include: {
       owner: true,
@@ -390,7 +362,7 @@ async function findExistingEntry(seasonId: string, ownerEmail: string, ownerName
   const sameNameEntries = await prisma.entry.findMany({
     where: {
       seasonId,
-      owner: { name: ownerName },
+      teamName,
     },
     include: {
       owner: true,
@@ -450,6 +422,7 @@ async function createResolvedEntries(
         data: {
           seasonId,
           ownerId: owner.id,
+          teamName: entry.entryName,
           submissionMethod: SubmissionMethod.IMPORTED,
           submittedAt: new Date(),
           isLocked: true,

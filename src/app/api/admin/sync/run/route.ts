@@ -4,52 +4,29 @@ import { runDailySync } from "@/server/stats/run-daily-sync"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
+/** The MLB year in progress, by Eastern date (the nightly cron runs at 5 AM ET). */
+function currentYear() {
+  return Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric" }).format(new Date()))
+}
+
+// Auth is enforced by src/middleware.ts (admin cookie, or Bearer CRON_SECRET from Vercel Cron).
 async function handleSync(request: NextRequest) {
-  console.log("SYNC STARTED", {
-    at: new Date().toISOString(),
-    method: request.method,
-    userAgent: request.headers.get("user-agent"),
-  })
+  const yearParam = request.nextUrl.searchParams.get("year")
+  const year = yearParam ? Number(yearParam) : currentYear()
+
+  if (!Number.isInteger(year)) {
+    return NextResponse.json({ ok: false, message: "year must be a four-digit year." }, { status: 400 })
+  }
 
   try {
-    const authHeader = request.headers.get("authorization")
-    const cronSecret = process.env.CRON_SECRET
-
-    console.log("SYNC AUTH CHECK", {
-      authHeaderPresent: Boolean(authHeader),
-      cronSecretPresent: Boolean(cronSecret),
-    })
-
-    if (!cronSecret) {
-      console.error("SYNC FAILED: CRON_SECRET missing")
-      return NextResponse.json(
-        { ok: false, message: "CRON_SECRET is not configured." },
-        { status: 500 }
-      )
-    }
-
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      console.error("SYNC FAILED: Unauthorized request")
-      return NextResponse.json(
-        { ok: false, message: "Unauthorized" },
-        { status: 401 }
-      )
-    }
-
-    console.log("SYNC RUNNING DAILY SYNC")
-    const result = await runDailySync(2026)
-    console.log("SYNC SUCCESS", result)
-
+    const result = await runDailySync(year)
+    console.log("SYNC SUCCESS", JSON.stringify(result))
     return NextResponse.json(result)
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown sync error"
-
     console.error("SYNC FAILED", error)
-
     return NextResponse.json(
-      { ok: false, message },
-      { status: 500 }
+      { ok: false, message: error instanceof Error ? error.message : "Unknown sync error" },
+      { status: 500 },
     )
   }
 }

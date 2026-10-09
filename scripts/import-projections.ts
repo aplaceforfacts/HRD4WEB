@@ -126,8 +126,14 @@ const NAME_MATCH_OVERRIDES: Record<string, string> = {
   "pedro pages ": "pedro pages",
 }
 
+// Usage: npx tsx scripts/import-projections.ts <seasonYear> [csvPath]
+// csvPath defaults to src/data/steamer-<seasonYear>-hitters.csv (FanGraphs Steamer export).
 async function main() {
-  const csvPath = path.join(process.cwd(), "src", "data", "steamer-2026-hitters.csv")
+  const seasonYear = Number(process.argv[2])
+  if (!Number.isInteger(seasonYear)) {
+    throw new Error("Usage: npx tsx scripts/import-projections.ts <seasonYear> [csvPath]")
+  }
+  const csvPath = process.argv[3] ?? path.join(process.cwd(), "src", "data", `steamer-${seasonYear}-hitters.csv`)
 
   if (!fs.existsSync(csvPath)) {
     throw new Error(`CSV not found at ${csvPath}`)
@@ -218,7 +224,7 @@ async function main() {
       where: {
         playerId_seasonYear_source: {
           playerId: matchedPlayer.id,
-          seasonYear: 2026,
+          seasonYear,
           source: "steamer",
         },
       },
@@ -230,7 +236,7 @@ async function main() {
       },
       create: {
         playerId: matchedPlayer.id,
-        seasonYear: 2026,
+        seasonYear,
         source: "steamer",
         projectedHomeRuns,
         projectedAtBats,

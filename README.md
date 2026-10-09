@@ -2,51 +2,20 @@
 
 A Next.js + Prisma starter project for your fantasy baseball Home Run Derby format.
 
-## Included
-- public entry submission flow
-- season/group schema
-- scoring periods seeded for 2026
-- CSV snapshot upload
-- standings and category pages
-- optimal lineup view
-- team detail page with gap-to-optimal
-- win probability page
-- owner/team lookup search
+## What it does
+- League-scoped public site: `/{league}` standings, monthly races, player rankings,
+  optimal lineups, win odds and team pages, with past seasons via `?season=YYYY`
+- Scoring straight from MLB StatsAPI game logs, refreshed nightly
+- Self-service entry form (team name + owner email) or import from the host's workbook
+- Monthly standings workbook emailed to every owner (Resend)
+- Admin at `/admin`: league settings, owner emails, entry status, exports, sync
 
-## Getting started
+See [docs/OFFSEASON.md](docs/OFFSEASON.md) for how it works and the yearly checklist.
 
-1. Copy `.env.example` to `.env`
-2. Run `npm install`
-3. Run `npx prisma generate`
-4. Run `npx prisma migrate dev`
-5. Run `npm run prisma:seed`
-6. Run `npm run import:player-sheet:2026`
-7. Run `npm run dev`
+## Getting started (local)
 
-## Important notes
-
-### Player sheet
-The included `src/data/season-2026-player-sheet.ts` only contains a short seed sample so the package stays lightweight.
-Replace it with your full 2026 A–M dataset before production use.
-
-### Admin routes
-The admin sync and snapshot upload endpoints are not protected in this starter.
-Before production deployment, add commissioner auth or a shared secret.
-
-### Win probability
-The odds page uses a simple Monte Carlo model based on current totals plus remaining projected HR.
-It is useful for engagement, but should be presented as directional, not authoritative.
-
-## Suggested deployment
-- Vercel
-- Neon Postgres
-- Prisma migrations
-- nightly cron to `/api/admin/sync/run`
-
-## Example snapshot CSV
-
-```csv
-player_name,team,home_runs,at_bats,slugging_pct,snapshot_date
-Aaron Judge,NYY,3,20,0.600,2026-03-28
-Shohei Ohtani,LAD,2,18,0.550,2026-03-28
-```
+1. Copy `.env.example` to `.env` and point `DATABASE_URL` at a Postgres database
+2. `npm install`
+3. `npx prisma migrate deploy`
+4. `npm run prisma:seed` (sets up league `hrd` for the current MLB season)
+5. `npm run dev`, then `npm test`
