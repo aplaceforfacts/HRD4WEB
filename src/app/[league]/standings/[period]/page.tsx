@@ -1,12 +1,13 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { StandingsTable } from "@/components/standings-table"
+import { MetricCard } from "@/components/arc/metric-card/metric-card"
+import { PeriodSwitcher } from "@/components/standings/period-switcher"
+import { StandingsBoard, type StandingsBoardRow } from "@/components/standings/standings-board"
 import { leagueHref, linkContext } from "@/lib/paths"
 import {
   getPeriodLifecycleStatus,
   isPeriodActive,
-  orderPeriodsForStandings,
   periodSlug as toPeriodSlug,
 } from "@/lib/periods"
 import { requireSeasonContext } from "@/server/season/resolve-season"
@@ -203,7 +204,26 @@ export default async function StandingsPeriodPage({ params, searchParams }: Page
   })
   const oddsRows = oddsBoard?.rows?.slice(0, 5) ?? []
   const periodSlug = toPeriodSlug(scoringPeriod.label)
-  const orderedPeriods = orderPeriodsForStandings(season.scoringPeriods)
+
+  const optimal = await prisma.optimalLineup.findUnique({
+    where: { scoringPeriodId: scoringPeriod.id },
+    select: { totalHomeRuns: true },
+  })
+  const leaders = rows.filter((row) => row.rank === 1)
+  const sortedHomeRuns = rows.map((row) => row.homeRuns).sort((a, b) => a - b)
+  const median = sortedHomeRuns.length ? sortedHomeRuns[Math.floor((sortedHomeRuns.length - 1) / 2)] : 0
+  const leaderHomeRuns = leaders[0]?.homeRuns ?? 0
+
+  const boardRows: StandingsBoardRow[] = rows.map((row) => ({
+    entryId: row.entryId,
+    rank: row.rank,
+    isTied: row.isTied,
+    teamName: row.teamName,
+    homeRuns: row.homeRuns,
+    movement: "rankMovement" in row && typeof row.rankMovement === "number" ? row.rankMovement : null,
+    bestPick: row.selectedPlayers[0]?.fullName ?? "",
+    bestPickHomeRuns: row.selectedPlayers[0]?.homeRuns ?? 0,
+  }))
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -223,27 +243,13 @@ export default async function StandingsPeriodPage({ params, searchParams }: Page
             <p className="mt-1 text-sm text-neutral-500">{season.name}</p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {orderedPeriods.map((item) => {
-              const isActive = item.id === scoringPeriod.id
-              const href = leagueHref(ctx, `/standings/${toPeriodSlug(item.label)}`)
-
-              return (
-                <Link
-                  key={item.id}
-                  href={href}
-                  className={
-                    isActive
-                      ? "rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm text-white transition"
-                      : "rounded-full border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-700 transition hover:bg-neutral-50"
-                  }
-                >
-                  {item.label}
-                </Link>
-              )
-            })}
-          </div>
         </div>
+
+        <PeriodSwitcher
+          ctx={ctx}
+          periods={season.scoringPeriods.map((item) => ({ label: item.label, slug: toPeriodSlug(item.label) }))}
+          current={periodSlug}
+        />
 
         <div className="flex flex-wrap gap-2">
           {periodIsActive ? (
@@ -261,6 +267,27 @@ export default async function StandingsPeriodPage({ params, searchParams }: Page
             View optimal lineup
           </Link>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <MetricCard
+          label="Leader"
+          value={leaderHomeRuns}
+          suffix={"\u00a0HR"}
+          context={leaders.length > 2 ? `${leaders.length} teams tied` : leaders.map((row) => row.teamName).join(" & ") || "No scores yet"}
+        />
+        <MetricCard label="Field median" value={median} suffix={"\u00a0HR"} context={`Across ${rows.length} teams`} />
+        <MetricCard
+          label="Optimal lineup"
+          value={optimal?.totalHomeRuns ?? 0}
+          suffix={"\u00a0HR"}
+          context={
+            optimal?.totalHomeRuns && leaderHomeRuns
+              ? `Leader reached ${Math.round((leaderHomeRuns / optimal.totalHomeRuns) * 100)}% of it`
+              : "Best possible roster for this period"
+          }
+        />
+        <MetricCard label="Teams" value={totalEntries} context={season.name} />
       </div>
 
       {getPeriodLifecycleStatus(scoringPeriod) !== "active" ? (
@@ -328,7 +355,13 @@ export default async function StandingsPeriodPage({ params, searchParams }: Page
       ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-        <StandingsTable rows={rows} ctx={ctx} periodSlug={periodSlug} />
+        <StandingsBoard
+          rows={boardRows}
+          ctx={ctx}
+          periodSlug={periodSlug}
+          periodLabel={scoringPeriod.label}
+          showMovement={boardRows.some((row) => row.movement !== null)}
+        />
       </div>
     </div>
   )

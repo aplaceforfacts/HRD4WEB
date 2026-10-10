@@ -1,3 +1,4 @@
+import "@/components/arc/foundation.css"
 import "./globals.css"
 
 export const metadata = {

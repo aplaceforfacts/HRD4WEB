@@ -4,6 +4,13 @@
 
 :root {
   color-scheme: light;
+  /* Arc UI tokens, matched to the site: indigo accent, the site's system font. */
+  --accent: #4f46e5;
+  --accent-strong: #4338ca;
+  --accent-subtle: rgb(79 70 229 / 0.12);
+  --control-on: #4f46e5;
+  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 html {
