@@ -1,18 +1,14 @@
 export const dynamic = "force-dynamic"
 
 import Link from "next/link"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { MetricCard } from "@/components/arc/metric-card/metric-card"
+import { OptimalTable, type OptimalRow } from "@/components/optimal/optimal-table"
+import { PeriodSwitcher } from "@/components/standings/period-switcher"
 import { findPeriodBySlug, periodSlug } from "@/lib/periods"
 import { leagueHref, linkContext } from "@/lib/paths"
 import { prisma } from "@/lib/prisma"
 import { getOptimalLineup } from "@/server/optimal/get-optimal-lineup"
 import { requireSeasonContext } from "@/server/season/resolve-season"
-
-function formatPercent(value: number) {
-  return `${(value * 100).toFixed(1)}%`
-}
-
 
 export default async function OptimalPage({
   params,
@@ -25,146 +21,83 @@ export default async function OptimalPage({
   const context = await requireSeasonContext((await params).league, query.season)
   const { season } = context
   const ctx = linkContext(context)
-
   const selectedPeriod = findPeriodBySlug(season.scoringPeriods, query.period)
-  const selectedPeriodLabel = selectedPeriod.label
 
-  const [lineup, totalEntries, picksByPlayer] = await Promise.all([
+  const [lineup, totalEntries, picksByPlayer, leader] = await Promise.all([
     getOptimalLineup(selectedPeriod.id),
-    prisma.entry.count({
-      where: { seasonId: season.id },
-    }),
+    prisma.entry.count({ where: { seasonId: season.id } }),
     prisma.entryPlayer.groupBy({
       by: ["playerId"],
       where: { entry: { seasonId: season.id } },
       _count: { playerId: true },
     }),
+    prisma.entryPeriodScore.findFirst({
+      where: { scoringPeriodId: selectedPeriod.id },
+      orderBy: { homeRuns: "desc" },
+      select: { homeRuns: true },
+    }),
   ])
 
-  const pickCountMap = new Map<string, number>(
-    picksByPlayer.map((row) => [row.playerId, row._count.playerId]),
+  const pickCountMap = new Map(picksByPlayer.map((row) => [row.playerId, row._count.playerId]))
+  const multiPickGroups = new Set(
+    (lineup?.players ?? [])
+      .filter((row, _, all) => all.filter((other) => other.group.code === row.group.code).length > 1)
+      .map((row) => row.group.code),
   )
+
+  const rows: OptimalRow[] = (lineup?.players ?? []).map((row) => ({
+    id: row.id,
+    order: row.group.sortOrder * 100 + row.slotNumber,
+    groupLabel: multiPickGroups.has(row.group.code) ? `${row.group.code}-${row.slotNumber}` : row.group.code,
+    playerName: row.player.fullName,
+    homeRuns: row.homeRuns,
+    pickPercentage: totalEntries > 0 ? (pickCountMap.get(row.player.id) ?? 0) / totalEntries : 0,
+  }))
+
+  const nobodyPicked = rows.filter((row) => row.pickPercentage === 0).length
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Optimal Lineup</h1>
-          <p className="text-neutral-600">
-            The best possible roster for the selected scoring window.
-          </p>
+          <p className="text-neutral-600">The best possible roster for the selected scoring period.</p>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={leagueHref(ctx, "/odds", { period: periodSlug(selectedPeriodLabel) })}
-            className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-          >
-            Win odds
-          </Link>
-          <Link
-            href={leagueHref(ctx, "/standings")}
-            className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-          >
-            Standings
-          </Link>
-        </div>
+        <Link href={leagueHref(ctx, `/standings/${periodSlug(selectedPeriod.label)}`)} className="secondary-button">
+          {selectedPeriod.label} standings
+        </Link>
       </div>
 
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {season.scoringPeriods.map((period) => {
-              const slug = periodSlug(period.label)
-              const active = period.label === selectedPeriodLabel
-
-              return (
-                <Link key={period.id} href={leagueHref(ctx, "/optimal", { period: slug })}>
-                  <span
-                    className={
-                      active
-                        ? "inline-flex rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1 text-sm text-white"
-                        : "inline-flex rounded-full border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-50"
-                    }
-                  >
-                    {period.label}
-                  </span>
-                </Link>
-              )
-            })}
-          </div>
-
-          {lineup ? (
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm text-neutral-500">Scoring period</div>
-                <div className="mt-1 text-lg font-semibold">{lineup.scoringPeriod.label}</div>
-              </div>
-              <Badge>{lineup.players.length} slots</Badge>
-            </div>
-          ) : (
-            <div>
-              <div className="text-sm text-neutral-500">Scoring period</div>
-              <div className="mt-1 text-lg font-semibold">{selectedPeriodLabel}</div>
-            </div>
-          )}
-        </CardHeader>
-      </Card>
+      <PeriodSwitcher
+        ctx={ctx}
+        path="/optimal"
+        mode="query"
+        periods={season.scoringPeriods.map((period) => ({ label: period.label, slug: periodSlug(period.label) }))}
+        current={periodSlug(selectedPeriod.label)}
+      />
 
       {!lineup ? (
-        <Card>
-          <CardContent>
-            <div className="text-neutral-600">
-              No computed lineup exists for this scoring period yet. Run the sync after loading snapshots.
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border border-neutral-200 bg-white px-5 py-4 text-neutral-600">
+          No lineup has been computed for {selectedPeriod.label} yet. It appears after the first nightly sync of the period.
+        </div>
       ) : (
         <>
-          <Card>
-            <CardHeader>
-              <h2 className="text-lg font-semibold">Best possible total</h2>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold tracking-tight">{lineup.totalHomeRuns} HR</div>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+            <MetricCard label="Best possible" value={lineup.totalHomeRuns} suffix={" HR"} context={`${rows.length} picks`} />
+            <MetricCard
+              label="Leader"
+              value={leader?.homeRuns ?? 0}
+              suffix={" HR"}
+              context={
+                lineup.totalHomeRuns
+                  ? `${Math.round(((leader?.homeRuns ?? 0) / lineup.totalHomeRuns) * 100)}% of the best possible`
+                  : "No scores yet"
+              }
+            />
+            <MetricCard label="Nobody picked" value={nobodyPicked} context="Optimal players no team took" />
+          </div>
 
-          <Card>
-            <CardHeader>
-              <h2 className="text-lg font-semibold">Best possible roster</h2>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-neutral-200 text-left text-neutral-500">
-                      <th className="px-5 py-3">Group</th>
-                      <th className="px-5 py-3">Player</th>
-                      <th className="px-5 py-3">HR</th>
-                      <th className="px-5 py-3">Pick %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lineup.players.map((row) => (
-                      <tr key={row.id} className="border-b border-neutral-100 last:border-0">
-                        <td className="px-5 py-4 font-medium">{row.group.code}</td>
-                        <td className="px-5 py-4">{row.player.fullName}</td>
-                        <td className="px-5 py-4 font-semibold">{row.homeRuns}</td>
-                        <td className="px-5 py-4 text-neutral-600">
-                          {formatPercent(
-                            totalEntries > 0
-                              ? (pickCountMap.get(row.player.id) ?? 0) / totalEntries
-                              : 0,
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <OptimalTable rows={rows} periodLabel={selectedPeriod.label} />
         </>
       )}
     </div>

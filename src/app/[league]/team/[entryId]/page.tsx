@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic"
 import { notFound, redirect } from "next/navigation"
-import { PeriodTabs } from "@/components/period-tabs"
+import { PeriodSwitcher } from "@/components/standings/period-switcher"
 import { TeamGapTable } from "@/components/team-gap-table"
 import { TeamRosterTable } from "@/components/team-roster-table"
 import { TeamStatCards } from "@/components/team-stat-cards"
@@ -73,7 +73,10 @@ export default async function TeamPage({
       <div className="space-y-3">
         <h1 className="text-3xl font-bold tracking-tight">{detail.entry.teamName}</h1>
         <p className="text-neutral-600">{detail.period.label} view for {detail.entry.seasonName}</p>
-        <PeriodTabs
+        <PeriodSwitcher
+          ctx={{ leagueSlug: entry.season.league.slug, seasonYear: expectedSeasonParam ? entry.season.year : null }}
+          path={`/team/${entryId}`}
+          mode="query"
           periods={entry.season.scoringPeriods.map((item) => ({ label: item.label, slug: periodSlug(item.label) }))}
           current={periodSlug(period.label)}
         />
@@ -82,6 +85,7 @@ export default async function TeamPage({
       <TeamStatCards
         myHomeRuns={myScore}
         myRank={myRank}
+        teamCount={detail.teamCount}
         leaderHomeRuns={leaderHomeRuns}
         gapToLeader={gapToLeader}
         gapToOptimal={gapToOptimal}

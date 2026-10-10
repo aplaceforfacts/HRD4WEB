@@ -1,9 +1,9 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
 import Link from "next/link"
 import { SortableDataTable, type DataColumn } from "@/components/arc/sortable-data-table/sortable-data-table"
 import { leagueHref, type LinkContext } from "@/lib/paths"
+import { usePhoneLayout } from "./use-phone-layout"
 
 export type StandingsBoardRow = {
   entryId: string
@@ -15,21 +15,6 @@ export type StandingsBoardRow = {
   movement: number | null
   bestPick: string
   bestPickHomeRuns: number
-}
-
-/** Arc folds table rows into two lines below 620px; match its breakpoint. */
-const PHONE_QUERY = "(max-width: 620px)"
-
-function usePhoneLayout() {
-  return useSyncExternalStore(
-    (onChange) => {
-      const query = window.matchMedia(PHONE_QUERY)
-      query.addEventListener("change", onChange)
-      return () => query.removeEventListener("change", onChange)
-    },
-    () => window.matchMedia(PHONE_QUERY).matches,
-    () => false,
-  )
 }
 
 const placeLabel = (row: StandingsBoardRow) => `${row.isTied ? "T-" : ""}${row.rank}`

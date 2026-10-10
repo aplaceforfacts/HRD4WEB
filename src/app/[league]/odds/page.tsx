@@ -1,17 +1,13 @@
 export const dynamic = "force-dynamic"
 
 import Link from "next/link"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { MetricCard } from "@/components/arc/metric-card/metric-card"
+import { OddsTable, type OddsRow } from "@/components/odds/odds-table"
+import { PeriodSwitcher } from "@/components/standings/period-switcher"
 import { findPeriodBySlug, isPeriodActive, periodSlug } from "@/lib/periods"
 import { leagueHref, linkContext } from "@/lib/paths"
 import { getOddsBoard } from "@/server/odds/get-entry-win-odds"
 import { requireSeasonContext } from "@/server/season/resolve-season"
-
-function formatPercent(value: number) {
-  return `${(value * 100).toFixed(1)}%`
-}
-
 
 export default async function OddsPage({
   params,
@@ -26,144 +22,75 @@ export default async function OddsPage({
   const ctx = linkContext(context)
 
   const selectedPeriod = findPeriodBySlug(season.scoringPeriods, query.period)
-  const selectedPeriodLabel = selectedPeriod.label
   const selectedIsActive = isPeriodActive(selectedPeriod)
-  const activePeriods = season.scoringPeriods.filter((period) =>
-    isPeriodActive(period),
-  )
+  const activePeriods = season.scoringPeriods.filter((period) => isPeriodActive(period))
+  const odds = selectedIsActive ? await getOddsBoard(season.id, selectedPeriod.label) : null
 
-  const odds = selectedIsActive ? await getOddsBoard(season.id, selectedPeriodLabel) : null
+  const rows: OddsRow[] = (odds?.rows ?? []).map((row) => ({
+    id: row.id,
+    rank: row.rank,
+    isTied: row.isTied,
+    teamName: row.teamName,
+    currentHomeRuns: row.currentHomeRuns,
+    expectedFinalHr: row.expectedFinalHr,
+    winProbability: row.score,
+    top3Probability: row.top3Probability,
+  }))
+  const favorite = rows[0]
+  const contenders = rows.filter((row) => row.winProbability >= 0.01).length
+  const updated = odds?.rows[0]?.simulatedAt
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Win Probability</h1>
-          <p className="text-neutral-600">
-            Estimated chances to win each scoring period based on stored simulation results.
+          <p className="max-w-2xl text-neutral-600">
+            Each team&apos;s chance to win, from 1,500 simulations of the rest of the period. Updated every morning.
           </p>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={leagueHref(ctx, "/standings")}
-            className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-          >
-            Standings
-          </Link>
-          <Link
-            href={leagueHref(ctx, "/optimal", { period: periodSlug(selectedPeriodLabel) })}
-            className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-          >
-            Optimal lineup
-          </Link>
-        </div>
+        <Link href={leagueHref(ctx, "/standings")} className="secondary-button">
+          Standings
+        </Link>
       </div>
 
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {activePeriods.map((period) => {
-              const slug = periodSlug(period.label)
-              const active = period.label === selectedPeriodLabel
-
-              return (
-                <Link key={period.id} href={leagueHref(ctx, "/odds", { period: slug })}>
-                  <span
-                    className={
-                      active
-                        ? "inline-flex rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1 text-sm text-white"
-                        : "inline-flex rounded-full border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-50"
-                    }
-                  >
-                    {period.label}
-                  </span>
-                </Link>
-              )
-            })}
-          </div>
-
-          <div>
-            <h2 className="text-lg font-semibold">{selectedPeriodLabel} odds</h2>
-            <p className="text-sm text-neutral-500">
-              {selectedIsActive
-                ? "Rankings are based on win probability. Ties share probability during simulation."
-                : "This scoring period is complete, so win odds are hidden."}
-            </p>
-          </div>
-        </CardHeader>
-      </Card>
+      {activePeriods.length > 1 ? (
+        <PeriodSwitcher
+          ctx={ctx}
+          path="/odds"
+          mode="query"
+          periods={activePeriods.map((period) => ({ label: period.label, slug: periodSlug(period.label) }))}
+          current={periodSlug(selectedPeriod.label)}
+        />
+      ) : null}
 
       {!selectedIsActive ? (
-        <Card>
-          <CardContent>
-            <div className="text-neutral-600">
-              Completed and archived periods keep their final standings instead of stale win probabilities.
-            </div>
-          </CardContent>
-        </Card>
-      ) : !odds || odds.rows.length === 0 ? (
-        <Card>
-          <CardContent>
-            <div className="text-neutral-600">
-              No stored odds are available for this scoring period yet. Run the daily sync after the odds job is wired in.
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border border-neutral-200 bg-white px-5 py-4 text-neutral-600">
+          {selectedPeriod.label} is over, so there are no odds to show. Final results are on the standings page.
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-2xl border border-neutral-200 bg-white px-5 py-4 text-neutral-600">
+          Odds for {selectedPeriod.label} appear after the next nightly sync.
+        </div>
       ) : (
         <>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">{odds.period.label}</h2>
-                <Badge>{odds.rows.length} entries</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-neutral-200 text-left text-neutral-500">
-                      <th className="px-5 py-3">Rank</th>
-                      <th className="px-5 py-3">Team</th>
-                      <th className="px-5 py-3">Current HR</th>
-                      <th className="px-5 py-3">Expected final HR</th>
-                      <th className="px-5 py-3">Win %</th>
-                      <th className="px-5 py-3">Top 3 %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {odds.rows.map((row) => (
-                      <tr key={row.id} className="border-b border-neutral-100 last:border-0">
-                        <td className="px-5 py-4 font-medium">{row.rank}</td>
-                        <td className="px-5 py-4">
-                          <div className="font-medium">{row.teamName}</div>
-                          {row.isTied ? (
-                            <div className="text-xs text-neutral-500">Tied rank</div>
-                          ) : null}
-                        </td>
-                        <td className="px-5 py-4">{row.currentHomeRuns}</td>
-                        <td className="px-5 py-4">{row.expectedFinalHr.toFixed(1)}</td>
-                        <td className="px-5 py-4 font-semibold">{formatPercent(row.score)}</td>
-                        <td className="px-5 py-4">{formatPercent(row.top3Probability)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+            <MetricCard
+              label="Favorite"
+              value={Math.round((favorite?.winProbability ?? 0) * 1000) / 10}
+              suffix="%"
+              context={favorite?.teamName ?? ""}
+            />
+            <MetricCard label="Live contenders" value={contenders} context="Teams with at least a 1% chance" />
+            <MetricCard
+              label="Expected winning total"
+              value={Math.round(Math.max(...rows.map((row) => row.expectedFinalHr)))}
+              suffix={" HR"}
+              context={updated ? `As of ${updated.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}` : ""}
+            />
+          </div>
 
-          <Card>
-            <CardContent className="space-y-2 text-sm text-neutral-600">
-              <p>
-                These values come from saved odds rows, not on-page live simulation, so the page stays fast and reflects your scheduled sync output.
-              </p>
-              <p>
-                Early in a scoring period, odds will move sharply. Later in the period, they should become much more stable.
-              </p>
-            </CardContent>
-          </Card>
+          <OddsTable rows={rows} periodLabel={selectedPeriod.label} />
         </>
       )}
     </div>

@@ -8,6 +8,9 @@ type GapRow = {
   yourPlayerName: string | null
   yourHomeRuns: number
   gap: number
+  /** Season group order then slot, for sorting back to roster order. */
+  order: number
+  multiPick: boolean
 }
 
 export async function getEntryGapAnalysis(entryId: string, periodLabel = "Season") {
@@ -93,6 +96,8 @@ export async function getEntryGapAnalysis(entryId: string, periodLabel = "Season
           yourPlayerName: ownPick?.name ?? null,
           yourHomeRuns: ownHomeRuns,
           gap: optimalRow.homeRuns - ownHomeRuns,
+          order: bucket.sortOrder * 100 + index,
+          multiPick: best.length > 1,
         }
       })
     })

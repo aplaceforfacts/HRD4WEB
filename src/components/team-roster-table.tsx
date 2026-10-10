@@ -1,5 +1,7 @@
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+"use client"
+
+import { SortableDataTable, type DataColumn } from "@/components/arc/sortable-data-table/sortable-data-table"
+import { usePhoneLayout } from "@/components/standings/use-phone-layout"
 
 type TeamRosterRow = {
   entryPlayerId: string
@@ -12,52 +14,53 @@ type TeamRosterRow = {
   homeRuns: number
   rankInGroup: number | null
   isTied: boolean
+  /** Position in the season's group order, for the default sort. */
+  order: number
+  /** True for a group that takes several picks (Group M), shown as M-1, M-2… */
+  multiPick: boolean
 }
 
+const groupLabel = (row: TeamRosterRow) => (row.multiPick ? `${row.groupCode}-${row.slotNumber}` : row.groupCode)
+const groupRank = (row: TeamRosterRow) => (row.rankInGroup ? `${row.isTied ? "T-" : ""}#${row.rankInGroup}` : "—")
+
 export function TeamRosterTable({ rows }: { rows: TeamRosterRow[] }) {
+  const isPhone = usePhoneLayout()
+
+  const player: DataColumn<TeamRosterRow> = {
+    key: "playerName",
+    label: "Player",
+    render: (_, row) =>
+      isPhone ? (
+        <>
+          <span className="mr-2 text-slate-500">{groupLabel(row)}</span>
+          {row.playerName}
+        </>
+      ) : (
+        row.playerName
+      ),
+  }
+  const group: DataColumn<TeamRosterRow> = { key: "order", label: "Group", numeric: false, width: 96, render: (_, row) => groupLabel(row) }
+  const team: DataColumn<TeamRosterRow> = { key: "team", label: "Team", width: 96, render: (_, row) => row.team ?? "—" }
+  const homeRuns: DataColumn<TeamRosterRow> = { key: "homeRuns", label: "HR", numeric: true, width: 80 }
+  const rank: DataColumn<TeamRosterRow> = {
+    key: "rankInGroup",
+    label: "Group rank",
+    numeric: true,
+    width: 120,
+    render: (_, row) => groupRank(row),
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-lg font-semibold">Your roster contributions</h2>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-neutral-500">
-                <th className="px-5 py-3">Group</th>
-                <th className="px-5 py-3">Player</th>
-                <th className="px-5 py-3">Team</th>
-                <th className="px-5 py-3">HR</th>
-                <th className="px-5 py-3">Cat. rank</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.entryPlayerId} className="border-b border-neutral-100 last:border-0">
-                  <td className="px-5 py-4 font-medium">
-                    {row.groupCode}
-                    {row.groupCode === "M" ? `-${row.slotNumber}` : ""}
-                  </td>
-                  <td className="px-5 py-4">{row.playerName}</td>
-                  <td className="px-5 py-4">{row.team ?? "—"}</td>
-                  <td className="px-5 py-4 font-semibold">{row.homeRuns}</td>
-                  <td className="px-5 py-4">
-                    {row.rankInGroup ? (
-                      <span className="inline-flex items-center gap-2">
-                        #{row.rankInGroup}
-                        {row.isTied ? <Badge>Tied</Badge> : null}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold">Your roster contributions</h2>
+      <SortableDataTable
+        rows={rows}
+        columns={isPhone ? [player, homeRuns, team, rank] : [group, player, team, homeRuns, rank]}
+        rowKey="entryPlayerId"
+        caption="Roster contributions"
+        defaultSort={{ key: "order", direction: "asc" }}
+        itemName={{ one: "player", other: "players" }}
+      />
+    </section>
   )
 }

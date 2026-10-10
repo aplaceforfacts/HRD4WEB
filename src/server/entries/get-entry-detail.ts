@@ -56,7 +56,7 @@ export async function getEntryDetail(entryId: string, periodLabel = "Season") {
   const leader = allScores[0] ?? null
   const myScore = allScores.find((score) => score.entryId === entry.id) ?? null
 
-  const rosterRows = players.map((row) => {
+  const rosterRows = players.map((row, index) => {
     const stat = row.player.periodStats[0]
     return {
       entryPlayerId: row.id,
@@ -69,6 +69,8 @@ export async function getEntryDetail(entryId: string, periodLabel = "Season") {
       homeRuns: stat?.homeRuns ?? 0,
       rankInGroup: stat?.rankInGroup ?? null,
       isTied: stat?.isTied ?? false,
+      order: index,
+      multiPick: row.group.selectionCount > 1,
     }
   })
 
@@ -84,6 +86,7 @@ export async function getEntryDetail(entryId: string, periodLabel = "Season") {
     rosterRows,
     myScore,
     leader,
+    teamCount: allScores.length,
     optimal,
   }
 }

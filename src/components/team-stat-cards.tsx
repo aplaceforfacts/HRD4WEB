@@ -1,8 +1,11 @@
-import { Card, CardContent } from "@/components/ui/card"
+import { MetricCard } from "@/components/arc/metric-card/metric-card"
+
+const HR = " HR"
 
 export function TeamStatCards({
   myHomeRuns,
   myRank,
+  teamCount,
   leaderHomeRuns,
   gapToLeader,
   gapToOptimal,
@@ -10,36 +13,30 @@ export function TeamStatCards({
 }: {
   myHomeRuns: number
   myRank: number | null
+  teamCount: number
   leaderHomeRuns: number
   gapToLeader: number
   gapToOptimal: number
   isFinal?: boolean
 }) {
-  const cards = isFinal
-    ? [
-        { label: "Final HR", value: myHomeRuns },
-        { label: "Final rank", value: myRank ?? "—" },
-        { label: "Winner HR", value: leaderHomeRuns },
-        { label: "Final gap", value: gapToLeader },
-      ]
-    : [
-        { label: "Your HR", value: myHomeRuns },
-        { label: "Your rank", value: myRank ?? "—" },
-        { label: "Leader HR", value: leaderHomeRuns },
-        { label: "Gap to leader", value: gapToLeader },
-        { label: "Gap to optimal", value: gapToOptimal },
-      ]
-
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-      {cards.map((card) => (
-        <Card key={card.label}>
-          <CardContent className="space-y-2">
-            <div className="text-sm text-neutral-500">{card.label}</div>
-            <div className="text-3xl font-bold tracking-tight">{card.value}</div>
-          </CardContent>
-        </Card>
-      ))}
+    <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${isFinal ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
+      <MetricCard label={isFinal ? "Final HR" : "Your HR"} value={myHomeRuns} suffix={HR} context="This period" />
+      <MetricCard
+        label={isFinal ? "Final place" : "Your place"}
+        value={myRank ?? 0}
+        context={myRank ? `of ${teamCount} teams` : "Not ranked yet"}
+      />
+      <MetricCard label={isFinal ? "Winner" : "Leader"} value={leaderHomeRuns} suffix={HR} context="Top score this period" />
+      <MetricCard
+        label={isFinal ? "Final gap" : "Gap to leader"}
+        value={gapToLeader}
+        suffix={HR}
+        context={gapToLeader === 0 ? "You're in front" : "Behind first place"}
+      />
+      {!isFinal ? (
+        <MetricCard label="Gap to optimal" value={gapToOptimal} suffix={HR} context="Left on the table so far" />
+      ) : null}
     </div>
   )
 }

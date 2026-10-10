@@ -1,4 +1,7 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+"use client"
+
+import { SortableDataTable, type DataColumn } from "@/components/arc/sortable-data-table/sortable-data-table"
+import { usePhoneLayout } from "@/components/standings/use-phone-layout"
 
 type GapRow = {
   groupCode: string
@@ -8,45 +11,55 @@ type GapRow = {
   yourPlayerName: string | null
   yourHomeRuns: number
   gap: number
+  order: number
+  multiPick: boolean
 }
 
+const groupLabel = (row: GapRow) => (row.multiPick ? `${row.groupCode}-${row.slotNumber}` : row.groupCode)
+
 export function TeamGapTable({ rows }: { rows: GapRow[] }) {
+  const isPhone = usePhoneLayout()
+  const keyed = rows.map((row) => ({ ...row, key: `${row.groupCode}-${row.slotNumber}` }))
+  type Row = (typeof keyed)[number]
+
+  const group: DataColumn<Row> = { key: "order", label: "Group", numeric: false, width: 88, render: (_, row) => groupLabel(row) }
+  const yours: DataColumn<Row> = {
+    key: "yourPlayerName",
+    label: "Your pick",
+    render: (_, row) => (
+      <>
+        {isPhone ? <span className="mr-2 text-slate-500">{groupLabel(row)}</span> : null}
+        {row.yourPlayerName ?? "—"}
+        {isPhone ? <span className="text-slate-500"> ({row.yourHomeRuns})</span> : null}
+      </>
+    ),
+  }
+  const yourHr: DataColumn<Row> = { key: "yourHomeRuns", label: "Your HR", numeric: true, width: 96 }
+  const best: DataColumn<Row> = {
+    key: "optimalPlayerName",
+    label: "Optimal pick",
+    render: (_, row) => (isPhone ? `Best: ${row.optimalPlayerName} (${row.optimalHomeRuns})` : row.optimalPlayerName),
+  }
+  const bestHr: DataColumn<Row> = { key: "optimalHomeRuns", label: "Optimal HR", numeric: true, width: 112 }
+  const gap: DataColumn<Row> = {
+    key: "gap",
+    label: "Gap",
+    numeric: true,
+    width: 80,
+    render: (_, row) => <span className={row.gap > 0 ? "font-semibold text-rose-700" : "text-slate-500"}>{row.gap > 0 ? `−${row.gap}` : "0"}</span>,
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-lg font-semibold">Gap to optimal</h2>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-neutral-500">
-                <th className="px-5 py-3">Group</th>
-                <th className="px-5 py-3">Your pick</th>
-                <th className="px-5 py-3">Your HR</th>
-                <th className="px-5 py-3">Optimal pick</th>
-                <th className="px-5 py-3">Optimal HR</th>
-                <th className="px-5 py-3">Gap</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={`${row.groupCode}-${row.slotNumber}`} className="border-b border-neutral-100 last:border-0">
-                  <td className="px-5 py-4 font-medium">
-                    {row.groupCode}
-                    {row.groupCode === "M" ? `-${row.slotNumber}` : ""}
-                  </td>
-                  <td className="px-5 py-4">{row.yourPlayerName ?? "—"}</td>
-                  <td className="px-5 py-4">{row.yourHomeRuns}</td>
-                  <td className="px-5 py-4">{row.optimalPlayerName}</td>
-                  <td className="px-5 py-4">{row.optimalHomeRuns}</td>
-                  <td className="px-5 py-4 font-semibold">{row.gap}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold">Gap to optimal</h2>
+      <SortableDataTable
+        rows={keyed}
+        columns={isPhone ? [yours, gap, best] : [group, yours, yourHr, best, bestHr, gap]}
+        rowKey="key"
+        caption="Gap to optimal"
+        defaultSort={{ key: "order", direction: "asc" }}
+        itemName={{ one: "slot", other: "slots" }}
+      />
+    </section>
   )
 }
