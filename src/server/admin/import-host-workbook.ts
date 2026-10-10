@@ -1,7 +1,8 @@
 import ExcelJS from "exceljs"
 import { SubmissionMethod } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { playerNameKey, splitHostLabel } from "@/server/players/player-names"
+import { normalizeTeamCode, playerNameKey, splitHostLabel } from "@/server/players/player-names"
+import { getTeamAbbreviations, searchMlbPlayerByName } from "@/server/stats/mlb-stats-api"
 
 /**
  * Loads a season from the league host's workbook:
@@ -79,7 +80,9 @@ export async function importHostWorkbook(leagueSlug: string, year: number, file:
   // Resolve each pool label to a Player: already in this season's pool, else an
   // existing player with that name (team breaks ties), else a new player whose MLB
   // ID the nightly sync looks up.
-  const allPlayers = await prisma.player.findMany({ select: { id: true, fullName: true, mlbTeam: true } })
+  const allPlayers = await prisma.player.findMany({
+    select: { id: true, fullName: true, mlbTeam: true, providerPlayerId: true },
+  })
   const playersByKey = new Map<string, typeof allPlayers>()
   for (const player of allPlayers) {
     const key = playerNameKey(player.fullName)
@@ -87,7 +90,26 @@ export async function importHostWorkbook(leagueSlug: string, year: number, file:
   }
   const seasonPoolByKey = new Map(season.seasonPlayerGroups.map((row) => [`${row.group.code}:${playerNameKey(row.player.fullName)}`, row.player]))
 
-  const resolved = new Map<string, { playerId: string | null; row: PoolRow; action: "in-pool" | "existing-player" | "new-player" }>()
+  // Each year's pool is new, so a name match against an earlier season's player
+  // has to be confirmed. Same team as his last known club: same player. Otherwise
+  // ask MLB: if only one MLB player has the name, it's him after a move; if several
+  // do (a real namesake), the host's team picks the right one. Only when MLB can't
+  // decide is the row left for review.
+  const teamCodes = await getTeamAbbreviations(year)
+  const sameTeam = (a: string | null | undefined, b: string | null | undefined) =>
+    Boolean(a && b && normalizeTeamCode(a) === normalizeTeamCode(b))
+  const byProviderId = new Map(allPlayers.filter((p) => p.providerPlayerId).map((p) => [p.providerPlayerId!, p]))
+
+  type Resolution = {
+    playerId: string | null
+    /** MLB ID to store on a newly created player. */
+    providerPlayerId?: string
+    row: PoolRow
+    action: "in-pool" | "existing-player" | "new-player"
+  }
+  const resolved = new Map<string, Resolution>()
+  const namesakesToReview: string[] = []
+
   for (const row of pool) {
     const key = playerNameKey(row.name)
     const inPool = seasonPoolByKey.get(`${row.groupCode}:${key}`)
@@ -95,9 +117,41 @@ export async function importHostWorkbook(leagueSlug: string, year: number, file:
       resolved.set(row.label, { playerId: inPool.id, row, action: "in-pool" })
       continue
     }
+
     const candidates = playersByKey.get(key) ?? []
-    const match = candidates.length === 1 ? candidates[0] : candidates.find((player) => player.mlbTeam === row.team)
-    resolved.set(row.label, { playerId: match?.id ?? null, row, action: match ? "existing-player" : "new-player" })
+    const sameClub = candidates.find((candidate) => sameTeam(candidate.mlbTeam, row.team))
+    if (sameClub || candidates.length === 0) {
+      resolved.set(row.label, { playerId: sameClub?.id ?? null, row, action: sameClub ? "existing-player" : "new-player" })
+      continue
+    }
+
+    // Search MLB with the spelling we already have on file, not the host's (it may be misspelled).
+    const people = (await searchMlbPlayerByName(candidates[0].fullName.replace(/\s*\(.*\)$/, "")).catch(() => [])).filter(
+      (person) => playerNameKey(person.fullName) === key,
+    )
+    const person =
+      people.length === 1
+        ? people[0]
+        : people.find((p) => p.currentTeam && sameTeam(teamCodes.get(p.currentTeam.id), row.team))
+
+    if (!person) {
+      const options = people
+        .map((p) => `${p.id} (${p.currentTeam ? teamCodes.get(p.currentTeam.id) ?? "?" : "no team"}${p.primaryPosition ? `, ${p.primaryPosition.abbreviation}` : ""})`)
+        .join(", ")
+      namesakesToReview.push(
+        `${row.label}: MLB has ${people.length} players by that name and none is on ${row.team ?? "a listed team"}: ${options || "none found"}. Add the right MLB ID to PROVIDER_ID_OVERRIDES.`,
+      )
+      resolved.set(row.label, { playerId: null, row, action: "new-player" })
+      continue
+    }
+
+    const known = byProviderId.get(String(person.id))
+    resolved.set(
+      row.label,
+      known
+        ? { playerId: known.id, row, action: "existing-player" }
+        : { playerId: null, providerPlayerId: String(person.id), row, action: "new-player" },
+    )
   }
 
   // Picks: one team per row, columns in group order (multi-pick groups take n columns).
@@ -130,6 +184,8 @@ export async function importHostWorkbook(leagueSlug: string, year: number, file:
     alreadyInPool: [...resolved.values()].filter((value) => value.action === "in-pool").length,
     addingExistingPlayers: [...resolved.values()].filter((value) => value.action === "existing-player").map((value) => value.row.label),
     creatingNewPlayers: [...resolved.values()].filter((value) => value.action === "new-player").map((value) => value.row.label),
+    /** Names MLB couldn't pin to one player; give these an MLB ID override. */
+    namesakesToReview,
     teamsInWorkbook: teams.length + badTeams.length,
     teamsAlreadyInApp: teams.length - newTeams.length,
     teamsToCreate: newTeams.map((team) => team.teamName),
@@ -143,12 +199,27 @@ export async function importHostWorkbook(leagueSlug: string, year: number, file:
     const group = groupByCode.get(value.row.groupCode)!
     const playerId =
       value.playerId ??
-      (await prisma.player.create({ data: { fullName: value.row.name, mlbTeam: value.row.team, isActive: true } })).id
+      (
+        await prisma.player.create({
+          data: {
+            fullName: value.row.name,
+            mlbTeam: value.row.team,
+            providerPlayerId: value.providerPlayerId ?? null,
+            isActive: true,
+          },
+        })
+      ).id
     value.playerId = playerId
     await prisma.seasonPlayerGroup.upsert({
       where: { seasonId_playerId: { seasonId: season.id, playerId } },
       update: {},
-      create: { seasonId: season.id, groupId: group.id, playerId, displayOrder: value.row.displayOrder },
+      create: {
+        seasonId: season.id,
+        groupId: group.id,
+        playerId,
+        teamCode: value.row.team,
+        displayOrder: value.row.displayOrder,
+      },
     })
   }
 

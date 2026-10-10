@@ -147,6 +147,9 @@ model SeasonPlayerGroup {
   seasonId     String
   groupId      String
   playerId     String
+  /// The club listed for him on that season's player sheet ("NYY"), so an old
+  /// season's workbook still shows the team he was picked on after a trade.
+  teamCode     String?
   displayOrder Int?
   notes        String?
   createdAt    DateTime @default(now())
@@ -161,18 +164,16 @@ model SeasonPlayerGroup {
   @@index([groupId, displayOrder])
 }
 
-/// A person. One owner can have several teams (entries) in a season, and every
-/// team needs an owner email so the monthly workbook can reach them.
+/// A person, matched by email. Seasons start fresh: an owner only appears in a
+/// season through that season's entries, so nothing about a person carries over.
 model Owner {
-  id          String   @id @default(cuid())
-  name        String
-  email       String   @unique
-  phone       String?
-  notes       String?
-  /// The owner asked not to receive the monthly workbook.
-  emailOptOut Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   entries    Entry[]
   deliveries ExportDelivery[]
@@ -186,6 +187,9 @@ model Entry {
   ownerId          String
   /// What standings show ("Snoopy#2"). Unique within a season.
   teamName         String
+  /// The owner unsubscribed from this season's monthly workbook. Per season, so
+  /// someone who opted out one year gets the emails again if they rejoin.
+  emailOptOut      Boolean          @default(false)
   submissionMethod SubmissionMethod
   submittedAt      DateTime?
   isLocked         Boolean          @default(false)

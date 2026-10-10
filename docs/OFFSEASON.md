@@ -42,6 +42,23 @@ checklist. Everything here works for any league; `hrd` is the original league.
 3. Redeploy, sign in at `/admin`, open the season, and do a **Dry run** on a past
    month. Then switch on "Email the workbook to all owners automatically".
 
+## Every season starts fresh
+
+Each year has new owners and a new player pool. Only the league's format (groups and
+how many picks each takes) and a draft of the prize sheet carry over. Specifically:
+
+- Teams, owners' entries, the pool, standings and exports all belong to one season.
+- An owner is just an email; unsubscribing covers that season only, so someone who
+  rejoins next year gets the emails again.
+- Each season's pool keeps the team printed on that year's host sheet, so an old
+  season's workbook still reads the way the host sent it, even after trades.
+- MLB data (a player's MLB ID, game logs, projections) is shared across years. When
+  the importer sees a name it already knows, it reuses that player if the team
+  matches, or if MLB has only one player by that name (he moved clubs). When MLB has
+  several players by that name and none on the listed team, the dry run lists them
+  under `namesakesToReview` with their MLB IDs: add the right one to
+  `PROVIDER_ID_OVERRIDES` before the season starts, or he'll score 0.
+
 ## Each new season
 
 1. **Create the season** (pulls opening and closing day from MLB, copies last

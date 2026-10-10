@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { playerNameKey, splitHostLabel } from "@/server/players/player-names"
+import { normalizeTeamCode, playerNameKey, splitHostLabel } from "@/server/players/player-names"
 
 describe("splitHostLabel", () => {
   it("splits the team code off host labels", () => {
@@ -23,5 +23,15 @@ describe("playerNameKey", () => {
   it("maps known host misspellings", () => {
     expect(playerNameKey("Vinnie Pasquantiono")).toBe(playerNameKey("Vinnie Pasquantino"))
     expect(playerNameKey("Xander Bogarts")).toBe(playerNameKey("Xander Bogaerts"))
+  })
+})
+
+describe("normalizeTeamCode", () => {
+  it("maps host team spellings to MLB's", () => {
+    expect(normalizeTeamCode("PHIL")).toBe("PHI")
+    expect(normalizeTeamCode("ARZ")).toBe(normalizeTeamCode("AZ"))
+    expect(normalizeTeamCode("A's")).toBe("ATH")
+    expect(normalizeTeamCode("CHW")).toBe("CWS")
+    expect(normalizeTeamCode(null)).toBeNull()
   })
 })

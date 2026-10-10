@@ -65,7 +65,7 @@ export async function runMonthlyExport(seasonId: string, scoringPeriodId: string
   const [entries, scores, league] = await Promise.all([
     prisma.entry.findMany({
       where: { seasonId },
-      select: { id: true, teamName: true, owner: { select: { id: true, name: true, email: true, emailOptOut: true } } },
+      select: { id: true, teamName: true, emailOptOut: true, owner: { select: { id: true, name: true, email: true } } },
     }),
     prisma.entryPeriodScore.findMany({
       where: {
@@ -78,8 +78,12 @@ export async function runMonthlyExport(seasonId: string, scoringPeriodId: string
   ])
 
   // Create a delivery row per owner the first time; later runs reuse them.
-  const owners = new Map<string, (typeof entries)[number]["owner"]>()
-  for (const entry of entries) owners.set(entry.owner.id, entry.owner)
+  const owners = new Map<string, (typeof entries)[number]["owner"] & { optedOut: boolean }>()
+  for (const entry of entries) {
+    // Unsubscribing covers all of a person's teams for this season only.
+    const previous = owners.get(entry.owner.id)
+    owners.set(entry.owner.id, { ...entry.owner, optedOut: (previous?.optedOut ?? true) && entry.emailOptOut })
+  }
 
   const existing = await prisma.exportDelivery.findMany({ where: { exportRunId: run.id }, select: { ownerId: true } })
   const known = new Set(existing.map((row) => row.ownerId))
@@ -88,7 +92,7 @@ export async function runMonthlyExport(seasonId: string, scoringPeriodId: string
   if (fresh.length > 0) {
     await prisma.exportDelivery.createMany({
       data: fresh.map((owner) => {
-        const skip = owner.emailOptOut ? "Owner opted out." : isPlaceholderEmail(owner.email) ? "No real email on file." : null
+        const skip = owner.optedOut ? "Owner unsubscribed this season." : isPlaceholderEmail(owner.email) ? "No real email on file." : null
         return {
           exportRunId: run.id,
           ownerId: owner.id,
@@ -141,6 +145,7 @@ export async function runMonthlyExport(seasonId: string, scoringPeriodId: string
       isFinal: workbook.isFinalPeriod,
       ownerName: delivery.owner.name,
       ownerId: delivery.ownerId,
+      seasonId,
       teams,
       leaders,
     })
@@ -237,12 +242,13 @@ function composeMessage(input: {
   isFinal: boolean
   ownerName: string
   ownerId: string
+  seasonId: string
   teams: TeamLine[]
   leaders: Array<{ team: string; homeRuns: number }>
 }) {
   const site = siteUrl()
   const standingsUrl = `${site}/${input.leagueSlug}/standings`
-  const unsubscribeUrl = `${site}/api/public/unsubscribe?o=${input.ownerId}&t=${unsubscribeToken(input.ownerId)}`
+  const unsubscribeUrl = `${site}/api/public/unsubscribe?o=${input.ownerId}&s=${input.seasonId}&t=${unsubscribeToken(input.ownerId, input.seasonId)}`
   const subject = input.isFinal
     ? `${input.seasonYear} ${input.leagueName}: final standings`
     : `${input.seasonYear} ${input.leagueName}: ${input.periodLabel} standings`
@@ -266,7 +272,7 @@ function composeMessage(input: {
     "",
     `Live standings: ${standingsUrl}`,
     "",
-    `Stop these emails: ${unsubscribeUrl}`,
+    `Stop these emails for this season: ${unsubscribeUrl}`,
   ].join("\n")
 
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#18211c">
@@ -283,7 +289,7 @@ ${input.teams
 </table>
 <p><b>${escapeHtml(input.periodLabel)} leaders</b><br>${input.leaders.map((row, index) => `${index + 1}. ${escapeHtml(row.team)}: ${row.homeRuns} HR`).join("<br>")}</p>
 <p><a href="${standingsUrl}">Live standings</a></p>
-<p style="font-size:12px;color:#5b6760">You're getting this because you have a team in the ${escapeHtml(input.leagueName)}. <a href="${unsubscribeUrl}" style="color:#5b6760">Stop these emails</a>.</p>
+<p style="font-size:12px;color:#5b6760">You're getting this because you have a team in the ${input.seasonYear} ${escapeHtml(input.leagueName)}. <a href="${unsubscribeUrl}" style="color:#5b6760">Stop these emails for this season</a>.</p>
 </div>`
 
   return { subject, text, html }

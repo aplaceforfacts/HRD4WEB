@@ -308,8 +308,8 @@ export default async function AdminSeasonPage({ params, searchParams }: PageProp
                       ) : (
                         <>
                           {entry.owner.email}
-                          {entry.owner.emailOptOut ? (
-                            <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">Opted out</span>
+                          {entry.emailOptOut ? (
+                            <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">Unsubscribed</span>
                           ) : null}
                         </>
                       )}

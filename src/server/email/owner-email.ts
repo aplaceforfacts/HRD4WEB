@@ -20,12 +20,17 @@ function signingSecret() {
   return secret
 }
 
-export function unsubscribeToken(ownerId: string) {
-  return crypto.createHmac("sha256", signingSecret()).update(`unsubscribe:${ownerId}`).digest("hex").slice(0, 32)
+/** Signed per owner and season, since an unsubscribe only covers one season. */
+export function unsubscribeToken(ownerId: string, seasonId: string) {
+  return crypto
+    .createHmac("sha256", signingSecret())
+    .update(`unsubscribe:${ownerId}:${seasonId}`)
+    .digest("hex")
+    .slice(0, 32)
 }
 
-export function verifyUnsubscribeToken(ownerId: string, token: string) {
-  const expected = Buffer.from(unsubscribeToken(ownerId))
+export function verifyUnsubscribeToken(ownerId: string, seasonId: string, token: string) {
+  const expected = Buffer.from(unsubscribeToken(ownerId, seasonId))
   const given = Buffer.from(token)
   return expected.length === given.length && crypto.timingSafeEqual(expected, given)
 }

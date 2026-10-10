@@ -12,14 +12,17 @@ function page(message: string, status = 200) {
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const ownerId = url.searchParams.get("o") ?? ""
+  const seasonId = url.searchParams.get("s") ?? ""
   const token = url.searchParams.get("t") ?? ""
 
-  if (!ownerId || !token || !verifyUnsubscribeToken(ownerId, token)) {
+  if (!ownerId || !seasonId || !token || !verifyUnsubscribeToken(ownerId, seasonId, token)) {
     return page("<p>This unsubscribe link isn't valid. Ask your commissioner to remove you from the monthly emails.</p>", 400)
   }
 
-  const owner = await prisma.owner.update({ where: { id: ownerId }, data: { emailOptOut: true } }).catch(() => null)
-  if (!owner) return page("<p>We couldn't find that subscription.</p>", 404)
+  const updated = await prisma.entry.updateMany({ where: { ownerId, seasonId }, data: { emailOptOut: true } })
+  if (updated.count === 0) return page("<p>We couldn't find that subscription.</p>", 404)
 
-  return page("<p>Done. You won't get the monthly standings workbook anymore. Your teams stay in the league.</p>")
+  return page(
+    "<p>Done. You won't get the monthly standings workbook for the rest of this season. Your teams stay in the league.</p>",
+  )
 }

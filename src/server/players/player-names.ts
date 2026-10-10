@@ -43,6 +43,19 @@ export function playerNameKey(value: string) {
   return PLAYER_NAME_ALIASES.get(base) ?? base
 }
 
+/** Host spellings of team codes -> MLB StatsAPI abbreviations. */
+const TEAM_CODE_ALIASES: Record<string, string> = {
+  PHIL: "PHI", PITT: "PIT", ARZ: "AZ", ARI: "AZ", WAS: "WSH", CHW: "CWS", "A'S": "ATH", AS: "ATH",
+  OAK: "ATH", KCR: "KC", SDP: "SD", SFG: "SF", TBR: "TB", LLA: "LAA",
+}
+
+/** Comparable team code: "PHIL" and "PHI" both -> "PHI". */
+export function normalizeTeamCode(code: string | null | undefined) {
+  if (!code) return null
+  const upper = code.trim().toUpperCase()
+  return TEAM_CODE_ALIASES[upper] ?? upper
+}
+
 /** Team codes as they appear at the end of host labels ("Aaron Judge NYY", "Nick Kurtz A's"). */
 const TEAM_TOKEN = /^(?:[A-Z]{2,4}|A's|AS)$/
 

@@ -83,7 +83,8 @@ async function fetchJson(url: string) {
 }
 
 export async function searchMlbPlayerByName(name: string) {
-  const data = await fetchJson(`${MLB_BASE}/people/search?names=${encodeURIComponent(name)}`)
+  // currentTeam is only returned when hydrated.
+  const data = await fetchJson(`${MLB_BASE}/people/search?names=${encodeURIComponent(name)}&hydrate=currentTeam`)
   return (data.people ?? []) as MlbPersonSearchResult[]
 }
 

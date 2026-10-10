@@ -68,8 +68,14 @@ export async function buildStandingsWorkbook(seasonId: string, throughPeriodId: 
   const playerMonth = new Map(playerStats.map((row) => [`${row.playerId}:${row.scoringPeriodId}`, row.homeRuns]))
   const entryMonth = new Map(entryScores.map((row) => [`${row.entryId}:${row.scoringPeriodId}`, row.homeRuns]))
   const pickedIds = new Set(entries.flatMap((entry) => entry.players.map((row) => row.playerId)))
-  const playerLabel = (player: { fullName: string; mlbTeam: string | null }) =>
-    player.mlbTeam ? `${player.fullName} ${player.mlbTeam}` : player.fullName
+  // Label players with the team on this season's sheet, not wherever they play now.
+  const seasonTeam = new Map(
+    season.groups.flatMap((group) => group.seasonPlayers.map((sp) => [sp.playerId, sp.teamCode] as const)),
+  )
+  const playerLabel = (player: { id: string; fullName: string; mlbTeam: string | null }) => {
+    const team = seasonTeam.get(player.id) ?? player.mlbTeam
+    return team ? `${player.fullName} ${team}` : player.fullName
+  }
 
   const workbook = new ExcelJS.Workbook()
   workbook.creator = season.league.name

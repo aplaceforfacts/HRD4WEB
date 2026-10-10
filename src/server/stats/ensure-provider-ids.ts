@@ -209,7 +209,6 @@ export async function ensureProviderIds(): Promise<MatchResult[]> {
       where: { id: player.id },
       data: {
         providerPlayerId: String(best.id),
-        mlbTeam: best.currentTeam?.name ?? undefined,
         primaryPosition: best.primaryPosition?.abbreviation ?? undefined,
       },
     })

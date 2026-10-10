@@ -243,6 +243,7 @@ async function ensurePlayersToAdd(payload: BatchIngestPayload, commit: boolean) 
         },
         update: {
           groupId: group.id,
+          teamCode: playerInput.mlbTeam,
           displayOrder: playerInput.displayOrder,
           notes: `Batch ingest source row ${playerInput.sourceRow}; picked ${playerInput.pickCount}x.`,
         },
@@ -250,6 +251,7 @@ async function ensurePlayersToAdd(payload: BatchIngestPayload, commit: boolean) 
           seasonId: season.id,
           groupId: group.id,
           playerId: player.id,
+          teamCode: playerInput.mlbTeam,
           displayOrder: playerInput.displayOrder,
           notes: `Batch ingest source row ${playerInput.sourceRow}; picked ${playerInput.pickCount}x.`,
         },
