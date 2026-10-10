@@ -110,15 +110,15 @@ npx tsx scripts/export-workbook.ts hrd 2026 Season out.xlsx  # build a workbook 
 
 ## Roadmap
 
-- **UI refresh with Arc UI (uiarc.dev).** The app is Next.js 15 + React 19 +
-  Tailwind 3, which is what Arc UI targets. It needs `shadcn init` and Motion
-  first, and Arc's CSS variables mapped to the app's palette. Good candidates:
-  - standings, roster and gap tables → Arc's sortable data table (animated reorder)
-  - team stat cards → metric cards with animated counters and sparklines
-  - period tabs → Arc tabs or segmented control
-  - player pickers and team search → combobox and multi-select
-  - entry form fields → Arc inputs and number fields
-  - (Pro) race bar chart to replay the season standings
-  Start with `/[league]/standings` on a branch; keep motion light on dense tables.
+- **Arc UI (uiarc.dev).** Shipped 2026-10-10 on standings, team, player rankings,
+  optimal lineup and win probability pages: sortable tables (`SortableDataTable`),
+  metric cards with rolling counters, and a segmented period switcher. Arc's files
+  live in `src/components/arc/`. `components.json` is hand-written so
+  `npx shadcn@latest add @uiarc/<name>` only adds Arc files. Tables reorder columns
+  below 620px (`usePhoneLayout`) so each phone row reads "place, name … HR".
+  Left to do before entries open in March: the entry form's player pickers
+  (Arc combobox / multi-select) and the home page. Win-probability cards have
+  only been seen without live odds; check them on opening day.
+  Optional: Arc Pro's race bar chart to replay the season standings.
 - Per-league commissioner sign-in (see above).
 - An in-app prediction-accuracy page built on `PlayerForecastSnapshot`.
